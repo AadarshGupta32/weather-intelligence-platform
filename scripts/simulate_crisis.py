@@ -138,6 +138,7 @@ def test_4_recycled_duplicate_media_phash(original_img_bytes):
     log(f"    Action Notes: {rep.get('actionNotes')}")
     assert rep.get('duplicateFlag') == True, "pHash deduplication should flag identical image!"
     log("    [SUCCESS] Recycled duplicate media successfully caught by pHash engine!")
+    return tracking
 
 def test_5_ai_rumor_and_panic_filtering():
     print_banner("TEST 5: AI NLP Panic Rumor Detection & Purge")
@@ -209,12 +210,89 @@ def test_7_micro_local_radius_gis_query():
         log(f"    - [{p.get('status')}] {p.get('hazardType')}: {p.get('title')}")
     log("    [SUCCESS] Spatial radius query and RFC 7946 GeoJSON export verified!")
 
+def test_8_live_meteorological_telemetry():
+    print_banner("TEST 8: Live Meteorological Telemetry Integration")
+    res = requests.get(f"{BACKEND_URL}/api/telemetry/current")
+    log(f"[*] Live IMD / AWS Telemetry: HTTP {res.status_code}")
+    data = res.json()
+    log(f"    Station: {data.get('city')} ({data.get('latitude')}, {data.get('longitude')})")
+    log(f"    Condition: {data.get('weatherCondition')}, Flood Risk: {data.get('floodRiskLevel')}")
+    log(f"    Temperature: {data.get('temperature')} C, Humidity: {data.get('humidity')}%")
+    log(f"    Precipitation: {data.get('precipitationMm')} mm, Wind: {data.get('windSpeedKmh')} km/h, Pressure: {data.get('pressureHpa')} hPa")
+    assert res.status_code == 200, "Telemetry endpoint must return HTTP 200"
+    assert "floodRiskLevel" in data, "Telemetry must include floodRiskLevel assessment"
+    log("    [SUCCESS] Meteorological telemetry cross-referencing operational!")
+
+def test_9_emergency_shelters_and_routing():
+    print_banner("TEST 9: Designated Emergency Shelters & Nearest Depot Routing")
+    res_geo = requests.get(f"{BACKEND_URL}/api/shelters/geojson")
+    features = res_geo.json().get("features", [])
+    log(f"[*] Active Emergency Shelters & Depots GeoJSON: {len(features)} facilities")
+    assert len(features) >= 5, "At least 5 emergency shelters must be registered"
+    
+    # Query nearest relief depot from Rajwada center
+    lat, lon = 22.7196, 75.8577
+    res_near = requests.get(f"{BACKEND_URL}/api/shelters/nearest?lat={lat}&lon={lon}&limit=3")
+    nearest = res_near.json()
+    log(f"[*] Nearest 3 Emergency Facilities to Incident Coordinates ({lat}, {lon}):")
+    for s in nearest:
+        log(f"    - [{s.get('type')}] {s.get('name')}: {s.get('distanceKm')} km away | Cap: {s.get('currentOccupancy')}/{s.get('capacity')} | Tel: {s.get('contactPhone')}")
+    assert len(nearest) > 0, "Must return nearest shelters"
+    assert nearest[0].get("distanceKm") is not None, "Distance calculation must be present"
+    log("    [SUCCESS] Nearest emergency shelter Haversine dispatch routing validated!")
+
+def test_10_media_forensics_inspection(dup_tracking_id):
+    print_banner("TEST 10: Perceptual Media Forensics Inspector")
+    track_res = requests.get(f"{BACKEND_URL}/api/reports/tracking/{dup_tracking_id}").json()
+    rep_id = track_res.get("report", {}).get("id")
+    log(f"[*] Running bitwise forensics analysis on duplicate report ID {rep_id}...")
+    
+    res = requests.get(f"{BACKEND_URL}/api/admin/media-forensics/{rep_id}")
+    log(f"[*] Media Forensics API: HTTP {res.status_code}")
+    data = res.json()
+    log(f"    Target Report: {data.get('targetTitle')} (ID: {data.get('targetReportId')})")
+    log(f"    Target pHash: {data.get('targetPHash')}")
+    if data.get("originalReportId"):
+        log(f"    Matched Original Report: #{data.get('originalReportId')} ({data.get('originalTitle')})")
+        log(f"    Bitwise Hamming Distance: {data.get('hammingDistance')} bits | Similarity: {data.get('similarityPercentage')}%")
+        log(f"    Forensic Verdict: {data.get('forensicVerdict')}")
+        assert data.get("isRecycledDuplicate") == True, "Forensics must identify recycled visual duplicate"
+    assert res.status_code == 200, "Forensics API must return HTTP 200"
+    log("    [SUCCESS] Media forensics bitwise diff inspector verified!")
+
+def test_11_disaster_sitrep_generation():
+    print_banner("TEST 11: Emergency Situation Report (SITREP) Generation")
+    res = requests.get(f"{BACKEND_URL}/api/admin/sitrep")
+    log(f"[*] Executive JSON SITREP: HTTP {res.status_code}")
+    sitrep = res.json()
+    log(f"    Incident: {sitrep.get('incidentName')} ({sitrep.get('sitrepId')})")
+    log(f"    Agency: {sitrep.get('reportingAgency')}, District: {sitrep.get('district')}")
+    log(f"    Total Ingested: {sitrep.get('totalReportsIngested')}, Ground Truth: {sitrep.get('verifiedGroundTruthCount')}")
+    log(f"    Rumors Suppressed: {sitrep.get('rumorsSuppressedByAI')}, Critical Incidents: {sitrep.get('criticalSeverityCount')}")
+    log(f"    Active Shelters: {sitrep.get('totalSheltersOperational')}, Total Capacity: {sitrep.get('shelterCapacityTotal')}")
+    log(f"    Hazard Breakdown: {sitrep.get('hazardBreakdown')}")
+    log(f"    Recommended Action: {sitrep.get('recommendedAction')}")
+    
+    # Test printable HTML export
+    res_html = requests.get(f"{BACKEND_URL}/api/admin/sitrep/html")
+    log(f"[*] Printable Executive SITREP HTML: HTTP {res_html.status_code} ({len(res_html.text)} bytes)")
+    assert res.status_code == 200, "SITREP JSON must return HTTP 200"
+    assert res_html.status_code == 200, "SITREP HTML must return HTTP 200"
+    assert "SURAKSHA-NET" in res_html.text, "SITREP HTML must contain SURAKSHA-NET header"
+    log("    [SUCCESS] Printable disaster SITREP generated and validated!")
+
 if __name__ == "__main__":
     test_1_service_health()
     test_2_high_velocity_social_stream()
     tracking_id, img_bytes = test_3_citizen_report_with_media()
-    test_4_recycled_duplicate_media_phash(img_bytes)
+    dup_tracking_id = test_4_recycled_duplicate_media_phash(img_bytes)
     test_5_ai_rumor_and_panic_filtering()
     test_6_lifecycle_state_machine_and_admin_verification(tracking_id)
     test_7_micro_local_radius_gis_query()
-    print_banner("ALL SURAKSHA-NET SYSTEM INTEGRATION TESTS PASSED!")
+    test_8_live_meteorological_telemetry()
+    test_9_emergency_shelters_and_routing()
+    if dup_tracking_id:
+        test_10_media_forensics_inspection(dup_tracking_id)
+    test_11_disaster_sitrep_generation()
+    print_banner("ALL 11 SURAKSHA-NET SYSTEM INTEGRATION TESTS PASSED!")
+

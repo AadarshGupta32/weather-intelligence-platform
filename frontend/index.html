@@ -26,7 +26,7 @@
 
         <div class="nav-center-ticker">
             <span class="badge badge-imd">IMD OFFICIAL FEED</span>
-            <span id="live-ticker">Monitoring high-velocity multi-source streams (#IMD, Citizen Ground Reports, Doppler Radar)...</span>
+            <span id="live-ticker">Monitoring high-velocity multi-source streams (#IMD, Ground Telemetry, Doppler Radar)...</span>
         </div>
 
         <div class="nav-actions">
@@ -34,10 +34,24 @@
                 <span id="conn-indicator" class="dot dot-connected"></span>
                 <span id="conn-text">LIVE STREAM ACTIVE</span>
             </div>
+            <button class="btn btn-secondary btn-sm" onclick="openSitrep()">📄 Emergency SITREP</button>
             <button class="btn btn-outline btn-sm" id="btn-sound-toggle" onclick="toggleAudio()">🔔 Sound ON</button>
             <button class="btn btn-danger btn-sm" onclick="openEmergencyBroadcastModal()">⚡ Dispatch Mass Alert</button>
         </div>
     </header>
+
+    <!-- Meteorological Telemetry Strip -->
+    <section class="telemetry-strip">
+        <div class="telem-item"><span class="telem-lbl">📍 GROUND SENSOR:</span> <strong id="telem-city">Indore Meteorological Station</strong></div>
+        <div class="telem-item"><span class="telem-lbl">🌡️ TEMP:</span> <span id="telem-temp">--</span></div>
+        <div class="telem-item"><span class="telem-lbl">💧 RAINFALL:</span> <span id="telem-rain" class="telem-rain-val">--</span></div>
+        <div class="telem-item"><span class="telem-lbl">💨 WIND GUSTS:</span> <span id="telem-wind">--</span></div>
+        <div class="telem-item"><span class="telem-lbl">⚠️ REGIONAL THREAT:</span> <span id="telem-risk" class="badge-risk">EVALUATING</span></div>
+        <div class="telem-layer-toggles">
+            <button class="btn btn-sm btn-layer" id="btn-radar" onclick="toggleRadarLayer()">🛰️ Doppler Radar: OFF</button>
+            <button class="btn btn-sm btn-layer active" id="btn-shelters" onclick="toggleSheltersLayer()">⛺ Safe Shelters: ON</button>
+        </div>
+    </section>
 
     <!-- Filter Control Bar -->
     <section class="filter-strip">
@@ -98,13 +112,14 @@
             
             <!-- Map Overlay Legend -->
             <div class="map-legend">
-                <div class="legend-header">GIS Severity & State Legend</div>
+                <div class="legend-header">GIS Command Overlay Legend</div>
                 <div class="legend-item"><span class="legend-dot dot-verified"></span> Verified Ground Truth</div>
                 <div class="legend-item"><span class="legend-dot dot-actioned"></span> Emergency Team Deployed</div>
                 <div class="legend-item"><span class="legend-dot dot-pending"></span> AI Checked (Pending Review)</div>
                 <div class="legend-item"><span class="legend-dot dot-critical"></span> High Urgency / Unverified</div>
                 <div class="legend-item"><span class="legend-dot dot-rumor"></span> AI Flagged Rumor / Duplicate</div>
-                <div class="legend-tip">💡 Click anywhere on map to set Citizen Report GPS coords</div>
+                <div class="legend-item"><span class="legend-dot dot-shelter"></span> ⛺ Designated Safe Shelter / Camp</div>
+                <div class="legend-tip">💡 Click map to drop GPS coords or view micro-local radius</div>
             </div>
         </div>
 
@@ -206,6 +221,13 @@
                         </div>
                     </div>
 
+                    <div style="display:flex; gap:8px; margin-bottom:12px;">
+                        <button type="button" class="btn btn-secondary btn-sm" style="flex:1;" onclick="findNearestShelterForCitizen()">
+                            ⛺ Find Nearest Safe Shelter
+                        </button>
+                    </div>
+                    <div id="nearest-shelter-info" class="hidden" style="background:rgba(16,185,129,0.15); border:1px solid #10b981; padding:8px; border-radius:6px; font-size:11px; margin-bottom:12px; color:#d1fae5;"></div>
+
                     <button type="submit" class="btn btn-primary btn-block" id="btn-submit-report">
                         🚀 Submit Verified Report (Kafka Decoupled)
                     </button>
@@ -267,6 +289,24 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeActionModal()">Cancel</button>
                 <button class="btn btn-danger" onclick="confirmDispatchAction()">Confirm & Dispatch Unit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Media Forensics Inspection Modal -->
+    <div id="forensics-modal" class="modal-overlay hidden">
+        <div class="modal-card" style="width: 650px; max-width: 95%;">
+            <div class="modal-header">
+                <h3>🔍 Media Forensics & Perceptual Hash Inspection</h3>
+                <button class="modal-close" onclick="closeForensicsModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div id="forensics-content">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeForensicsModal()">Close</button>
             </div>
         </div>
     </div>

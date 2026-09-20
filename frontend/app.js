@@ -1,21 +1,27 @@
 /**
  * SURAKSHA-NET: Real-Time Weather Intelligence & Emergency Response Platform
- * Frontend GIS Command Center & Citizen Portal
+ * Frontend GIS Command Center & Citizen Portal (Phase 2 Advanced Intelligence)
  */
 
 const API_BASE = 'http://localhost:8080';
 let map;
 let geoJsonLayer;
+let sheltersLayer;
+let radarLayer = null;
 let radiusCircle = null;
 let stompClient = null;
 let audioEnabled = true;
 let reportsData = [];
 let activeReportForAction = null;
+let isRadarActive = false;
+let isSheltersActive = true;
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
+    fetchTelemetry();
     fetchReportsGeoJson();
+    fetchSheltersGeoJson();
     fetchLeaderboard();
     connectRealtimeStreams();
 
@@ -29,6 +35,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const radiusKm = parseFloat(document.getElementById('filter-radius').value) || 5;
         drawRadiusCircle(lat, lng, radiusKm);
     });
+
+    // Periodically refresh telemetry every 60s
+    setInterval(fetchTelemetry, 60000);
 });
 
 /**
@@ -36,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 function initMap() {
     map = L.map('gis-map', {
-        center: [22.7196, 75.8577], // Default centered on Indore
+        center: [22.7196, 75.8577], // Centered on Indore
         zoom: 12,
         zoomControl: true
     });
@@ -48,6 +57,7 @@ function initMap() {
         maxZoom: 19
     }).addTo(map);
 
+    // 1. Incidents Layer
     geoJsonLayer = L.geoJSON(null, {
         pointToLayer: (feature, latlng) => {
             const markerColor = getMarkerColor(feature.properties);
@@ -67,6 +77,31 @@ function initMap() {
                 const radiusKm = parseFloat(document.getElementById('filter-radius').value) || 5;
                 drawRadiusCircle(lat, lon, radiusKm);
             });
+        }
+    }).addTo(map);
+
+    // 2. Safe Shelters Layer
+    sheltersLayer = L.geoJSON(null, {
+        pointToLayer: (feature, latlng) => {
+            return L.circleMarker(latlng, {
+                radius: 8,
+                fillColor: '#10b981',
+                color: '#d1fae5',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.9
+            });
+        },
+        onEachFeature: (feature, layer) => {
+            const p = feature.properties;
+            layer.bindPopup(`
+                <div style="font-family:'Inter',sans-serif; color:#0f172a; min-width:200px;">
+                    <div style="font-weight:bold; font-size:12px; color:#065f46;">⛺ ${escapeHtml(p.name)}</div>
+                    <div style="font-size:10px; color:#64748b;">${escapeHtml(p.type)} | Available: <strong>${p.availableSlots} / ${p.capacity}</strong></div>
+                    <div style="font-size:11px; margin-top:4px;">📍 ${escapeHtml(p.address || '')}</div>
+                    <div style="font-size:11px; margin-top:2px;">📞 ${escapeHtml(p.contactPhone || '1077')}</div>
+                </div>
+            `);
         }
     }).addTo(map);
 }
@@ -105,7 +140,11 @@ function createPopupContent(p) {
     const rumorPercent = Math.round((p.rumorScore || 0) * 100);
     const mediaHtml = p.mediaUrl ? `<div style="margin-top:6px;"><img src="${p.mediaUrl}" style="width:100%; border-radius:4px; max-height:120px; object-fit:cover;" /></div>` : '';
     const phashHtml = p.phash ? `<div style="font-family:monospace; font-size:10px; color:#38bdf8; margin-top:2px;">pHash: ${p.phash}</div>` : '';
-    const dupAlert = p.duplicateFlag ? `<div style="color:#ef4444; font-size:10px; font-weight:bold;">⚠️ RECYCLED DUPLICATE MEDIA DETECTED</div>` : '';
+    const dupAlert = p.duplicateFlag ? `
+        <div style="color:#ef4444; font-size:10px; font-weight:bold; margin-top:4px;">
+            ⚠️ RECYCLED DUPLICATE MEDIA DETECTED
+            <button onclick="openForensicsModal(${p.id})" style="background:#dc2626; color:white; border:none; border-radius:3px; padding:2px 6px; font-size:9px; cursor:pointer; margin-left:4px;">Inspect Forensics</button>
+        </div>` : '';
 
     return `
         <div style="font-family:'Inter', sans-serif; min-width:240px; color:#0f172a;">
@@ -135,7 +174,37 @@ function createPopupContent(p) {
 }
 
 /**
- * 2. Fetch GeoJSON and Render Map Layers
+ * 2. Meteorological Telemetry Fetcher
+ */
+async function fetchTelemetry() {
+    try {
+        const res = await fetch(`${API_BASE}/api/telemetry/current`);
+        if (!res.ok) return;
+        const t = await res.json();
+
+        document.getElementById('telem-city').innerText = `${t.city} Station (IMD)`;
+        document.getElementById('telem-temp').innerText = `${t.temperature.toFixed(1)}°C`;
+        document.getElementById('telem-rain').innerText = `${t.precipitationMm.toFixed(1)} mm`;
+        document.getElementById('telem-wind').innerText = `${t.windSpeedKmh.toFixed(1)} km/h`;
+        
+        const riskBadge = document.getElementById('telem-risk');
+        riskBadge.innerText = t.floodRiskLevel.replace(/_/g, ' ');
+        if (t.floodRiskLevel.includes('CRITICAL') || t.floodRiskLevel.includes('HIGH')) {
+            riskBadge.className = 'badge-risk';
+            riskBadge.style.borderColor = '#ef4444';
+            riskBadge.style.color = '#fca5a5';
+        } else {
+            riskBadge.className = 'badge-risk';
+            riskBadge.style.borderColor = '#10b981';
+            riskBadge.style.color = '#86efac';
+        }
+    } catch (e) {
+        console.warn('Telemetry fetch warning:', e.message);
+    }
+}
+
+/**
+ * 3. Fetch GeoJSON and Render Map Layers
  */
 async function fetchReportsGeoJson() {
     try {
@@ -163,8 +232,18 @@ async function fetchReportsGeoJson() {
         renderFeedList(reportsData);
 
     } catch (err) {
-        console.warn('API fetch warning (backend starting up?):', err.message);
+        console.warn('API fetch warning:', err.message);
     }
+}
+
+async function fetchSheltersGeoJson() {
+    try {
+        const res = await fetch(`${API_BASE}/api/shelters/geojson`);
+        if (!res.ok) return;
+        const data = await res.json();
+        sheltersLayer.clearLayers();
+        sheltersLayer.addData(data);
+    } catch (e) {}
 }
 
 function updateStats(features) {
@@ -208,7 +287,11 @@ function renderFeedList(features) {
                 <span class="metric-loc">📍 ${escapeHtml(p.city || 'Indore')}</span>
                 <span class="metric-rumor ${rumorScore > 50 ? 'high-rumor' : ''}">🤖 Rumor Score: ${rumorScore}%</span>
             </div>
-            ${p.duplicateFlag ? '<div style="color:#ef4444; font-size:11px; font-weight:bold;">⚠️ Recycled Duplicate Media Flagged</div>' : ''}
+            ${p.duplicateFlag ? `
+                <div style="color:#ef4444; font-size:11px; font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
+                    <span>⚠️ Recycled Duplicate Media Flagged</span>
+                    <button class="btn btn-danger btn-sm" style="padding:2px 6px; font-size:10px;" onclick="openForensicsModal(${p.id})">Forensics</button>
+                </div>` : ''}
             <div class="card-actions">
                 ${p.status !== 'ADMIN_VERIFIED' && p.status !== 'ACTIONED' && !isRumor ? 
                     `<button class="btn btn-primary btn-sm" onclick="verifyReportFromMap(${p.id})">Verify Ground Truth</button>` : ''}
@@ -231,14 +314,155 @@ function focusOnMarker(reportId) {
 }
 
 /**
- * 3. Real-Time Stream Integration (STOMP + SSE Fallback)
+ * 4. Layer Controls: Doppler Radar & Shelters
+ */
+function toggleRadarLayer() {
+    const btn = document.getElementById('btn-radar');
+    isRadarActive = !isRadarActive;
+
+    if (isRadarActive) {
+        // RainViewer Live Weather Radar Tile Layer
+        radarLayer = L.tileLayer('https://tilecache.rainviewer.com/v2/radar/nowcast_45min/256/{z}/{x}/{y}/2/1_1.png', {
+            opacity: 0.65,
+            zIndex: 500
+        }).addTo(map);
+        btn.innerText = '🛰️ Doppler Radar: ON';
+        btn.classList.add('active');
+    } else {
+        if (radarLayer) {
+            map.removeLayer(radarLayer);
+            radarLayer = null;
+        }
+        btn.innerText = '🛰️ Doppler Radar: OFF';
+        btn.classList.remove('active');
+    }
+}
+
+function toggleSheltersLayer() {
+    const btn = document.getElementById('btn-shelters');
+    isSheltersActive = !isSheltersActive;
+
+    if (isSheltersActive) {
+        sheltersLayer.addTo(map);
+        btn.innerText = '⛺ Safe Shelters: ON';
+        btn.classList.add('active');
+    } else {
+        map.removeLayer(sheltersLayer);
+        btn.innerText = '⛺ Safe Shelters: OFF';
+        btn.classList.remove('active');
+    }
+}
+
+/**
+ * 5. Media Forensics Modal
+ */
+async function openForensicsModal(reportId) {
+    const modal = document.getElementById('forensics-modal');
+    const content = document.getElementById('forensics-content');
+    content.innerHTML = '<div style="color:#94a3b8; font-size:0.8rem; text-align:center;">Analyzing bitwise perceptual hashes...</div>';
+    modal.classList.remove('hidden');
+
+    try {
+        const res = await fetch(`${API_BASE}/api/admin/media-forensics/${reportId}`);
+        if (!res.ok) throw new Error('Could not retrieve forensics report');
+        const f = await res.json();
+
+        content.innerHTML = `
+            <div style="font-size:0.82rem; color:#cbd5e1; margin-bottom:8px;">
+                Incident: <strong>${escapeHtml(f.targetTitle)}</strong> (${f.targetTrackingId})
+            </div>
+            <div class="forensics-grid">
+                <div class="forensics-card">
+                    <strong style="font-size:11px; color:#38bdf8;">NEW CITIZEN UPLOAD</strong>
+                    <img src="${f.targetMediaUrl || '/uploads/placeholder.jpg'}" alt="Target Upload" />
+                    <div class="forensics-meta">
+                        <div>Tracking: <strong>${f.targetTrackingId}</strong></div>
+                        <div style="margin-top:4px;">pHash Fingerprint:</div>
+                        <div class="phash-box">${f.targetPHash || 'N/A'}</div>
+                    </div>
+                </div>
+                <div class="forensics-card">
+                    <strong style="font-size:11px; color:#f59e0b;">MATCHED EXISTING MEDIA</strong>
+                    <img src="${f.originalMediaUrl || '/uploads/placeholder.jpg'}" alt="Original Media" />
+                    <div class="forensics-meta">
+                        <div>Original Report: <strong>${escapeHtml(f.originalTitle || 'N/A')}</strong></div>
+                        <div>Original ID: <strong>${f.originalTrackingId || 'N/A'}</strong></div>
+                        <div style="margin-top:4px;">pHash Fingerprint:</div>
+                        <div class="phash-box">${f.originalPHash || 'N/A'}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="match-verdict-box">
+                <div class="match-verdict-title">⚠️ HAMMING DISTANCE: ${f.hammingDistance} / 64 BITS (${f.similarityPercentage}% VISUAL MATCH)</div>
+                <div class="match-verdict-sub">${f.forensicVerdict}</div>
+            </div>
+        `;
+
+    } catch (err) {
+        content.innerHTML = `<div style="color:#f87171; font-size:0.8rem;">${err.message}</div>`;
+    }
+}
+
+function closeForensicsModal() {
+    document.getElementById('forensics-modal').classList.add('hidden');
+}
+
+/**
+ * 6. Find Nearest Shelter for Citizen
+ */
+async function findNearestShelterForCitizen() {
+    const lat = document.getElementById('rep-lat').value;
+    const lon = document.getElementById('rep-lon').value;
+    const infoBox = document.getElementById('nearest-shelter-info');
+
+    try {
+        infoBox.innerHTML = 'Locating high-ground safe shelters nearby...';
+        infoBox.classList.remove('hidden');
+
+        const res = await fetch(`${API_BASE}/api/shelters/nearest?lat=${lat}&lon=${lon}`);
+        if (!res.ok) throw new Error('Unable to find shelters');
+        const list = await res.json();
+
+        if (list.length === 0) {
+            infoBox.innerHTML = 'No operational shelters found nearby.';
+            return;
+        }
+
+        const s = list[0];
+        infoBox.innerHTML = `
+            <div><strong>Nearest Shelter:</strong> ${escapeHtml(s.name)} (<strong>${s.distanceKm} km</strong> away)</div>
+            <div>Address: ${escapeHtml(s.address)} | Phone: ${escapeHtml(s.contactPhone)}</div>
+            <div style="margin-top:4px;">
+                <button type="button" onclick="focusOnShelter(${s.latitude}, ${s.longitude})" style="background:#10b981; color:white; border:none; padding:2px 8px; border-radius:3px; font-size:10px; cursor:pointer;">
+                    📍 View on Map
+                </button>
+            </div>
+        `;
+    } catch (e) {
+        infoBox.innerHTML = `<span style="color:#fca5a5;">${e.message}</span>`;
+    }
+}
+
+function focusOnShelter(lat, lon) {
+    map.flyTo([lat, lon], 15, { duration: 1 });
+}
+
+/**
+ * 7. Open Printable Situation Report (SITREP)
+ */
+function openSitrep() {
+    window.open(`${API_BASE}/api/admin/sitrep/html?district=Indore`, '_blank');
+}
+
+/**
+ * 8. Real-Time Stream Integration (STOMP + SSE Fallback)
  */
 function connectRealtimeStreams() {
     try {
-        // Attempt SockJS / STOMP
         const socket = new SockJS(`${API_BASE}/ws-weather`);
         stompClient = Stomp.over(socket);
-        stompClient.debug = null; // Quiet console
+        stompClient.debug = null;
 
         stompClient.connect({}, () => {
             console.log('Connected to STOMP WebSocket broker');
@@ -253,8 +477,7 @@ function connectRealtimeStreams() {
                 const alert = JSON.parse(msg.body);
                 handleLiveEmergencyAlert(alert);
             });
-        }, (err) => {
-            console.warn('STOMP connect failed, engaging Server-Sent Events (SSE) fallback');
+        }, () => {
             connectSseFallback();
         });
     } catch (e) {
@@ -299,7 +522,6 @@ function handleLiveReportUpdate(report) {
     if (audioEnabled) playChime();
     document.getElementById('live-ticker').innerText = `LIVE: Report ${report.trackingId} transitioned to ${report.status} (${report.hazardType})`;
 
-    // Refresh GeoJSON layer and stats
     fetchReportsGeoJson();
     fetchLeaderboard();
 }
@@ -310,7 +532,7 @@ function handleLiveEmergencyAlert(alert) {
 }
 
 /**
- * 4. Citizen Ground Report Submission (Kafka Decoupled)
+ * 9. Citizen Ground Report Submission (Kafka Decoupled)
  */
 async function submitCitizenReport(event) {
     event.preventDefault();
@@ -345,11 +567,10 @@ async function submitCitizenReport(event) {
 
         alert(`✅ Report Ingested Successfully!\n\nTracking Receipt: ${data.trackingId}\n\nYour ground report is buffered in Kafka and currently undergoing AI rumor evaluation.`);
 
-        // Reset form
         document.getElementById('citizen-report-form').reset();
         document.getElementById('image-preview-container').classList.add('hidden');
+        document.getElementById('nearest-shelter-info').classList.add('hidden');
 
-        // Automatically switch to tracking tab
         document.getElementById('track-id-input').value = data.trackingId;
         switchTab('tracking-tab');
         trackReport();
@@ -370,7 +591,6 @@ function previewImage(input) {
             preview.src = e.target.result;
             document.getElementById('image-preview-container').classList.remove('hidden');
 
-            // Simulate immediate client pHash fingerprint
             const mockHash = (Math.random().toString(16) + '0000000000000000').substring(2, 18);
             document.getElementById('phash-preview-label').innerText = `pHash Fingerprint: ${mockHash}`;
         };
@@ -379,7 +599,7 @@ function previewImage(input) {
 }
 
 /**
- * 5. Citizen Tracking Ledger
+ * 10. Citizen Tracking Ledger
  */
 async function trackReport() {
     const trackingId = document.getElementById('track-id-input').value.trim();
@@ -446,7 +666,7 @@ function isStateActiveOrPassed(current, step) {
 }
 
 /**
- * 6. Civic Reporter Leaderboard
+ * 11. Civic Reporter Leaderboard
  */
 async function fetchLeaderboard() {
     try {
@@ -473,7 +693,7 @@ async function fetchLeaderboard() {
 }
 
 /**
- * 7. Admin Action Handlers
+ * 12. Admin Action Handlers
  */
 async function verifyReportFromMap(id) {
     if (!confirm('Confirm ground truth verification for this citizen report?')) return;
@@ -566,7 +786,7 @@ async function sendBroadcastAlert() {
 }
 
 /**
- * 8. Utilities & UI Controls
+ * 13. Utilities & UI Controls
  */
 function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -605,8 +825,8 @@ function playChime() {
         const gain = ctx.createGain();
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
         gain.gain.setValueAtTime(0.2, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
         osc.start();

@@ -21,8 +21,20 @@ public class WeatherIntelApplication {
     }
 
     @Bean
-    CommandLineRunner seedDemoData(ReportRepository reportRepository, UserRepository userRepository) {
+    CommandLineRunner seedDemoData(
+            ReportRepository reportRepository,
+            UserRepository userRepository,
+            com.weatherintel.repository.EmergencyShelterRepository shelterRepository) {
         return args -> {
+            if (shelterRepository.count() == 0) {
+                shelterRepository.save(new EmergencyShelter("Holkar Stadium Relief Camp", "EVACUATION_CAMP", 22.7246, 75.8732, "Race Course Road, New Palasia, Indore", "+91-731-2544101", 1500, 320));
+                shelterRepository.save(new EmergencyShelter("Nehru Stadium Safe Zone", "EVACUATION_CAMP", 22.7092, 75.8758, "Residency Area, Indore", "+91-731-2700300", 2000, 150));
+                shelterRepository.save(new EmergencyShelter("MY Hospital Trauma Response", "MEDICAL_CENTER", 22.7164, 75.8705, "Sanyogita Ganj, Indore", "+91-731-2527301", 500, 110));
+                shelterRepository.save(new EmergencyShelter("NDRF Kahn River Boat Depot", "NDRF_DEPOT", 22.7185, 75.8540, "Riverside Road, Rajwada, Indore", "1078", 50, 12));
+                shelterRepository.save(new EmergencyShelter("Scheme 54 Municipal Shelter", "EVACUATION_CAMP", 22.7562, 75.8890, "Vijay Nagar Sector A, Indore", "+91-731-2401122", 800, 45));
+                System.out.println(">>> Seeded 5 Operational Emergency Shelters & Safe Zones <<<");
+            }
+
             if (reportRepository.count() == 0) {
                 User arun = userRepository.findByUsername("citizen_arun").orElse(null);
                 User priya = userRepository.findByUsername("citizen_priya").orElse(null);
