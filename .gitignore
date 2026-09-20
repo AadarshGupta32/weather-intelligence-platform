@@ -1,0 +1,25 @@
+# Build artifacts
+target/
+*.jar
+*.war
+*.ear
+*.class
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+*.ipr
+*.iws
+
+# Uploads & logs
+backend/uploads/
+uploads/
+*.log
