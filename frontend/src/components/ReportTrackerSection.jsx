@@ -1,10 +1,11 @@
 /**
  * Report Tracker Section (Section 4: Citizen Incident Portal)
- * 3-Stage reporting wizard with client-side pHash media analysis and
- * a 5-stage horizontal lifecycle stepper
+ * 3-Stage reporting wizard with client-side pHash media analysis,
+ * 5-stage horizontal lifecycle stepper, and instant shelter finder
  */
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext.jsx';
+import { translations } from '../i18n/index.js';
 import { computeClientPHash } from '../utils/phash.js';
 import { 
     Send, 
@@ -17,19 +18,31 @@ import {
     Shield, 
     Truck, 
     Award,
-    Image as ImageIcon
+    Navigation,
+    Compass,
+    ShieldAlert
 } from 'lucide-react';
 
 export default function ReportTrackerSection() {
-    const { submitReport, reports } = useApp();
+    const { 
+        submitReport, 
+        reports, 
+        language, 
+        findNearestShelter, 
+        nearestShelterResult,
+        showToast,
+        selectedCity
+    } = useApp();
+
+    const t = translations[language] || translations.en;
 
     // Wizard Form State
     const [wizardStep, setWizardStep] = useState(1);
     const [title, setTitle] = useState('');
     const [hazardType, setHazardType] = useState('WATERLOGGING');
     const [description, setDescription] = useState('');
-    const [latitude, setLatitude] = useState('22.7533');
-    const [longitude, setLongitude] = useState('75.8937');
+    const [latitude, setLatitude] = useState(selectedCity.lat.toString());
+    const [longitude, setLongitude] = useState(selectedCity.lon.toString());
     const [mediaFile, setMediaFile] = useState(null);
     const [mediaPreview, setMediaPreview] = useState(null);
     const [mediaPhash, setMediaPhash] = useState(null);
@@ -64,11 +77,13 @@ export default function ReportTrackerSection() {
                 (pos) => {
                     setLatitude(pos.coords.latitude.toFixed(4));
                     setLongitude(pos.coords.longitude.toFixed(4));
+                    showToast('success', language === 'hi' ? 'GPS स्थान दर्ज किया गया' : 'GPS coordinates captured successfully');
                 },
                 () => {
-                    // Fallback to Indore center
-                    setLatitude('22.7196');
-                    setLongitude('75.8577');
+                    // Fallback to selected city coordinates
+                    setLatitude(selectedCity.lat.toString());
+                    setLongitude(selectedCity.lon.toString());
+                    showToast('info', language === 'hi' ? `${selectedCity.name} केंद्र निर्देशांक लागू किए गए` : `Centered to ${selectedCity.name} station coordinates`);
                 }
             );
         }
@@ -128,14 +143,21 @@ export default function ReportTrackerSection() {
 
     const currentStageIndex = getStageIndex(activeIncident.status);
 
+    const hazardChoices = [
+        { id: 'WATERLOGGING', label: language === 'hi' ? 'जलभराव' : 'Waterlogging', icon: '🌧️' },
+        { id: 'FLASH_FLOOD', label: language === 'hi' ? 'अचानक बाढ़' : 'Flash Flood', icon: '🌊' },
+        { id: 'CYCLONE_WIND', label: language === 'hi' ? 'आंधी / तूफान' : 'Squall / Wind', icon: '🌪️' },
+        { id: 'TREE_FALL', label: language === 'hi' ? 'पेड़ / मार्ग अवरोध' : 'Tree / Obstacle', icon: '🌲' }
+    ];
+
     return (
         <section id="report-tracker-section" className="section-container report-tracker-section">
             <div className="section-header-meta">
-                <span className="section-eyebrow">Citizen Crowdsourcing & Transparency</span>
-                <h2 className="section-title">Incident Reporting Portal & Lifecycle Tracker</h2>
-                <p className="section-desc">
-                    Submit verified ground observation with client-side media fingerprinting, and monitor end-to-end disaster response progression.
-                </p>
+                <span className="section-eyebrow">
+                    {language === 'hi' ? 'नागरिक सहभागिता एवं पारदर्शिता' : 'Citizen Crowdsourcing & Transparency'}
+                </span>
+                <h2 className="section-title">{t.report.title}</h2>
+                <p className="section-desc">{t.report.desc}</p>
             </div>
 
             <div className="report-tracker-layout">
@@ -143,25 +165,20 @@ export default function ReportTrackerSection() {
                 <div className="wizard-card-container">
                     <div className="wizard-header">
                         <div className="wizard-step-indicators">
-                            <span className={`step-badge ${wizardStep >= 1 ? 'active' : ''}`}>1. Category</span>
+                            <span className={`step-badge ${wizardStep >= 1 ? 'active' : ''}`}>{t.report.step1}</span>
                             <span className="step-arrow">→</span>
-                            <span className={`step-badge ${wizardStep >= 2 ? 'active' : ''}`}>2. Evidence</span>
+                            <span className={`step-badge ${wizardStep >= 2 ? 'active' : ''}`}>{t.report.step2}</span>
                             <span className="step-arrow">→</span>
-                            <span className={`step-badge ${wizardStep === 3 ? 'active' : ''}`}>3. Verified</span>
+                            <span className={`step-badge ${wizardStep === 3 ? 'active' : ''}`}>{t.report.step3}</span>
                         </div>
                     </div>
 
                     {/* Step 1: Category & Location */}
                     {wizardStep === 1 && (
                         <div className="wizard-step-body">
-                            <h3 className="wizard-step-title">Select Hazard & Location</h3>
+                            <h3 className="wizard-step-title">{t.report.catTitle}</h3>
                             <div className="hazard-select-grid">
-                                {[
-                                    { id: 'WATERLOGGING', label: 'Waterlogging', icon: '🌧️' },
-                                    { id: 'FLASH_FLOOD', label: 'Flash Flood', icon: '🌊' },
-                                    { id: 'CYCLONE_WIND', label: 'Squall / Wind', icon: '🌪️' },
-                                    { id: 'TREE_FALL', label: 'Tree / Obstacle', icon: '🌲' }
-                                ].map(h => (
+                                {hazardChoices.map(h => (
                                     <button
                                         key={h.id}
                                         type="button"
@@ -175,7 +192,14 @@ export default function ReportTrackerSection() {
                             </div>
 
                             <div className="location-input-group">
-                                <label className="input-label">GPS Geolocation</label>
+                                <div className="location-label-row">
+                                    <label className="input-label">
+                                        {language === 'hi' ? 'जीपीएस भू-स्थान' : 'GPS Geolocation'}
+                                    </label>
+                                    <span className="city-anchor-tag">
+                                        📍 {selectedCity.name}
+                                    </span>
+                                </div>
                                 <div className="gps-inputs-row">
                                     <input 
                                         type="text" 
@@ -195,7 +219,7 @@ export default function ReportTrackerSection() {
                                         type="button" 
                                         className="gps-locate-btn"
                                         onClick={handleGetLocation}
-                                        title="Auto-detect current GPS"
+                                        title={t.report.detectLocation}
                                     >
                                         <MapPin size={16} />
                                     </button>
@@ -208,7 +232,7 @@ export default function ReportTrackerSection() {
                                     className="primary-action-btn"
                                     onClick={() => setWizardStep(2)}
                                 >
-                                    Proceed to Evidence →
+                                    {language === 'hi' ? 'साक्ष्य जोड़ें →' : 'Proceed to Evidence →'}
                                 </button>
                             </div>
                         </div>
@@ -217,13 +241,15 @@ export default function ReportTrackerSection() {
                     {/* Step 2: Description & Media Upload */}
                     {wizardStep === 2 && (
                         <div className="wizard-step-body">
-                            <h3 className="wizard-step-title">Incident Details & Photo Evidence</h3>
+                            <h3 className="wizard-step-title">{t.report.detailsTitle}</h3>
                             
                             <div className="input-field-group">
-                                <label className="input-label">Incident Title</label>
+                                <label className="input-label">
+                                    {language === 'hi' ? 'घटना का शीर्षक' : 'Incident Title'}
+                                </label>
                                 <input 
                                     type="text"
-                                    placeholder="e.g., Severe waterlogging near Vijay Nagar Square"
+                                    placeholder={t.report.headlinePlaceholder}
                                     value={title}
                                     onChange={(e) => setTitle(e.target.value)}
                                     className="text-input"
@@ -232,9 +258,11 @@ export default function ReportTrackerSection() {
                             </div>
 
                             <div className="input-field-group">
-                                <label className="input-label">Field Description</label>
+                                <label className="input-label">
+                                    {language === 'hi' ? 'विवरण एवं स्थिति' : 'Field Description'}
+                                </label>
                                 <textarea 
-                                    placeholder="Describe depth, blocked roads, trapped people, or urgent assistance needed..."
+                                    placeholder={t.report.descPlaceholder}
                                     value={description}
                                     onChange={(e) => setDescription(e.target.value)}
                                     className="textarea-input"
@@ -243,10 +271,14 @@ export default function ReportTrackerSection() {
                             </div>
 
                             <div className="input-field-group">
-                                <label className="input-label">Upload Photo (with instant pHash verification)</label>
+                                <label className="input-label">
+                                    {language === 'hi' 
+                                        ? 'घटना की तस्वीर अपलोड करें (तुरंत pHash सत्यापन)' 
+                                        : 'Upload Photo (with instant pHash verification)'}
+                                </label>
                                 <label className="upload-dropzone">
                                     <UploadCloud size={24} className="text-brand-primary" />
-                                    <span>Click to browse or take ground photo</span>
+                                    <span>{t.report.uploadText}</span>
                                     <input 
                                         type="file" 
                                         accept="image/*" 
@@ -262,7 +294,9 @@ export default function ReportTrackerSection() {
                                             <span className="phash-tag">pHash: {mediaPhash || 'Computing...'}</span>
                                             {isDuplicateWarning && (
                                                 <div className="duplicate-alert-badge">
-                                                    ⚠️ Image hash matches an existing report!
+                                                    ⚠️ {language === 'hi' 
+                                                        ? 'यह छवि पहले से दर्ज रिपोर्ट से मेल खाती है!' 
+                                                        : 'Image hash matches an existing report!'}
                                                 </div>
                                             )}
                                         </div>
@@ -276,7 +310,7 @@ export default function ReportTrackerSection() {
                                     className="secondary-btn"
                                     onClick={() => setWizardStep(1)}
                                 >
-                                    ← Back
+                                    ← {language === 'hi' ? 'पीछे' : 'Back'}
                                 </button>
                                 <button 
                                     type="button" 
@@ -284,7 +318,7 @@ export default function ReportTrackerSection() {
                                     onClick={handleSubmit}
                                     disabled={isSubmitting}
                                 >
-                                    {isSubmitting ? 'Transmitting...' : 'Submit Incident Report'}
+                                    {isSubmitting ? (language === 'hi' ? 'भेजा जा रहा है...' : 'Transmitting...') : t.report.submitBtn}
                                 </button>
                             </div>
                         </div>
@@ -296,34 +330,46 @@ export default function ReportTrackerSection() {
                             <div className="success-icon-box">
                                 <Check size={32} className="text-success" />
                             </div>
-                            <h3 className="confirmation-title">Ground Report Transmitted</h3>
+                            <h3 className="confirmation-title">
+                                {language === 'hi' ? 'जमीनी रिपोर्ट सफलतापूर्वक प्रेषित' : 'Ground Report Transmitted'}
+                            </h3>
                             <p className="confirmation-desc">
-                                Your incident is registered under tracking token:
+                                {language === 'hi' 
+                                    ? 'आपकी घटना ट्रैकिंग टोकन के तहत पंजीकृत है:' 
+                                    : 'Your incident is registered under tracking token:'}
                             </p>
                             <div className="tracking-token-display">
                                 {submittedTrackingId || 'REP-VJ001'}
                             </div>
                             <p className="confirmation-note">
-                                Multimodal verification has been dispatched to IMD correlation workers.
+                                {language === 'hi' 
+                                    ? 'बहु-मॉडल सत्यापन IMD सहसंबंध प्रणाली को भेज दिया गया है।' 
+                                    : 'Multimodal verification has been dispatched to IMD correlation workers.'}
                             </p>
                             <button 
                                 type="button" 
                                 className="primary-action-btn"
                                 onClick={resetForm}
                             >
-                                File Another Observation
+                                {language === 'hi' ? 'एक और घटना दर्ज करें' : 'File Another Observation'}
                             </button>
                         </div>
                     )}
                 </div>
 
-                {/* Right Side: Horizontal Incident Lifecycle Stepper */}
+                {/* Right Side: Horizontal Incident Lifecycle Stepper & Quick Shelter Widget */}
                 <div className="lifecycle-card-container">
                     <div className="lifecycle-card-header">
-                        <span className="card-subhead">Disaster Response Chain</span>
-                        <h3 className="card-heading">End-to-End Incident Lifecycle</h3>
+                        <span className="card-subhead">
+                            {language === 'hi' ? 'आपदा प्रतिक्रिया श्रृंखला' : 'Disaster Response Chain'}
+                        </span>
+                        <h3 className="card-heading">
+                            {language === 'hi' ? 'घटना की प्रगति एवं जीवनचक्र' : 'End-to-End Incident Lifecycle'}
+                        </h3>
                         <div className="active-tracking-selector">
-                            <label className="selector-label">Tracking Incident:</label>
+                            <label className="selector-label">
+                                {language === 'hi' ? 'सक्रिय घटना:' : 'Tracking Incident:'}
+                            </label>
                             <select 
                                 value={selectedTrackId}
                                 onChange={(e) => setSelectedTrackId(e.target.value)}
@@ -341,11 +387,36 @@ export default function ReportTrackerSection() {
                     {/* 5-Stage Horizontal Stepper */}
                     <div className="horizontal-stepper">
                         {[
-                            { step: 1, name: 'Reported', desc: 'Crowdsourced GPS Logged', icon: <MapPin size={16} /> },
-                            { step: 2, name: 'AI Checked', desc: 'pHash & IMD Correlation', icon: <Cpu size={16} /> },
-                            { step: 3, name: 'Authority Confirmed', desc: 'Commander Verification', icon: <Shield size={16} /> },
-                            { step: 4, name: 'Teams Dispatched', desc: 'NDRF / Squad en Route', icon: <Truck size={16} /> },
-                            { step: 5, name: 'Resolved', desc: 'Ground Safe / All Clear', icon: <Award size={16} /> }
+                            { 
+                                step: 1, 
+                                name: language === 'hi' ? 'दर्ज' : 'Reported', 
+                                desc: language === 'hi' ? 'GPS आधारित' : 'Crowdsourced GPS', 
+                                icon: <MapPin size={16} /> 
+                            },
+                            { 
+                                step: 2, 
+                                name: language === 'hi' ? 'AI जांच' : 'AI Checked', 
+                                desc: language === 'hi' ? 'pHash व रडार' : 'pHash & IMD Match', 
+                                icon: <Cpu size={16} /> 
+                            },
+                            { 
+                                step: 3, 
+                                name: language === 'hi' ? 'सत्यापित' : 'Confirmed', 
+                                desc: language === 'hi' ? 'कमांड सेंटर' : 'Commander Verify', 
+                                icon: <Shield size={16} /> 
+                            },
+                            { 
+                                step: 4, 
+                                name: language === 'hi' ? 'दल रवाना' : 'Dispatched', 
+                                desc: language === 'hi' ? 'NDRF मार्ग में' : 'NDRF Squad Active', 
+                                icon: <Truck size={16} /> 
+                            },
+                            { 
+                                step: 5, 
+                                name: language === 'hi' ? 'सुरक्षित' : 'Resolved', 
+                                desc: language === 'hi' ? 'मार्ग साफ' : 'All Clear / Safe', 
+                                icon: <Award size={16} /> 
+                            }
                         ].map((s) => {
                             const isCompleted = s.step < currentStageIndex;
                             const isCurrent = s.step === currentStageIndex;
@@ -367,21 +438,73 @@ export default function ReportTrackerSection() {
                     {/* Incident Summary Card */}
                     <div className="tracked-summary-box">
                         <div className="summary-row">
-                            <span className="summary-label">Incident:</span>
+                            <span className="summary-label">
+                                {language === 'hi' ? 'घटना:' : 'Incident:'}
+                            </span>
                             <span className="summary-value">{activeIncident.title || 'Waterlogging Alert'}</span>
                         </div>
                         <div className="summary-row">
-                            <span className="summary-label">Reported By:</span>
-                            <span className="summary-value">{activeIncident.reportedBy || 'citizen_arun'} (Trust: {activeIncident.reporterTrustScore || 92} pts)</span>
+                            <span className="summary-label">
+                                {language === 'hi' ? 'रिपोर्टकर्ता:' : 'Reported By:'}
+                            </span>
+                            <span className="summary-value">{activeIncident.reportedBy || 'citizen_arun'} ({language === 'hi' ? 'स्कोर' : 'Trust'}: {activeIncident.reporterTrustScore || 92} pts)</span>
                         </div>
                         <div className="summary-row">
-                            <span className="summary-label">Current Status:</span>
+                            <span className="summary-label">
+                                {language === 'hi' ? 'वर्तमान स्थिति:' : 'Current Status:'}
+                            </span>
                             <span className="summary-value text-brand-primary">{activeIncident.status || 'REPORTED'}</span>
                         </div>
                         {activeIncident.actionNotes && (
                             <div className="summary-row">
-                                <span className="summary-label">Dispatch Notes:</span>
+                                <span className="summary-label">
+                                    {language === 'hi' ? 'प्रतिक्रिया विवरण:' : 'Dispatch Notes:'}
+                                </span>
                                 <span className="summary-value text-success">{activeIncident.actionNotes}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Quick Shelter Assistant Card */}
+                    <div className="shelter-quick-assistant-card">
+                        <div className="shelter-assistant-header">
+                            <div className="assistant-title-group">
+                                <Compass size={18} className="text-brand-primary" />
+                                <div>
+                                    <h4 className="assistant-heading">
+                                        {language === 'hi' ? 'आपातकालीन राहत शिविर सहायक' : 'Emergency Shelter Assistant'}
+                                    </h4>
+                                    <p className="assistant-sub">
+                                        {language === 'hi' 
+                                            ? `${selectedCity.name} क्षेत्र में निकटतम सुरक्षित निकासी बिंदु खोजें` 
+                                            : `Locate closest safe shelter & evacuation route in ${selectedCity.name}`}
+                                    </p>
+                                </div>
+                            </div>
+                            <button 
+                                className="shelter-quick-trigger-btn"
+                                onClick={() => findNearestShelter()}
+                            >
+                                <Navigation size={14} />
+                                <span>{language === 'hi' ? 'खोजें' : 'Locate'}</span>
+                            </button>
+                        </div>
+
+                        {nearestShelterResult && (
+                            <div className="shelter-quick-result">
+                                <div className="shelter-result-header">
+                                    <span className="shelter-result-name">
+                                        🏥 {nearestShelterResult.shelter.name}
+                                    </span>
+                                    <span className="shelter-result-dist">
+                                        {nearestShelterResult.distanceKm} km {language === 'hi' ? 'दूर' : 'away'}
+                                    </span>
+                                </div>
+                                <div className="shelter-result-details">
+                                    <span>👥 {language === 'hi' ? 'क्षमता:' : 'Capacity:'} {nearestShelterResult.shelter.capacity} {language === 'hi' ? 'व्यक्ति' : 'people'}</span>
+                                    <span>•</span>
+                                    <span>📞 {nearestShelterResult.shelter.contact || '1077'}</span>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -390,3 +513,4 @@ export default function ReportTrackerSection() {
         </section>
     );
 }
+

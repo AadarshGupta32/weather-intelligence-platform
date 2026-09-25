@@ -1,10 +1,13 @@
 /**
  * Dashboard Page
  * Main page coordinating the 5 meta-minimalist vertical sections,
- * sticky sub-navigation, tactical modals, and live toast notifications
+ * sticky sub-navigation, tactical modals, NDMA SACHET alert ticker,
+ * emergency speed-dial bar, and live toast notifications
  */
 import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar.jsx';
+import SachetTicker from '../components/SachetTicker.jsx';
+import EmergencyHotlineBar from '../components/EmergencyHotlineBar.jsx';
 import HeroSection from '../components/HeroSection.jsx';
 import GisMapSection from '../components/GisMapSection.jsx';
 import IncidentFeedSection from '../components/IncidentFeedSection.jsx';
@@ -13,11 +16,14 @@ import CivicTrustSection from '../components/CivicTrustSection.jsx';
 import ActionModal from '../components/ActionModal.jsx';
 import ForensicsModal from '../components/ForensicsModal.jsx';
 import SimulationModal from '../components/SimulationModal.jsx';
+import BroadcastModal from '../components/BroadcastModal.jsx';
 import { useApp } from '../context/AppContext.jsx';
+import { translations } from '../i18n/index.js';
 import { Activity, Map, Radio, Send, Award, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 
 export default function DashboardPage() {
-    const { notification } = useApp();
+    const { notification, language } = useApp();
+    const t = translations[language] || translations.en;
     const [activeSection, setActiveSection] = useState('operational-overview');
 
     // Track active scrolling section
@@ -58,8 +64,14 @@ export default function DashboardPage() {
 
     return (
         <div className="dashboard-layout">
-            {/* Top Navigation */}
+            {/* Top Navigation Bar */}
             <Navbar />
+
+            {/* NDMA SACHET Live Emergency Broadcast Ticker */}
+            <SachetTicker />
+
+            {/* Quick 1-Tap Emergency Speed-Dial Hotline Strip */}
+            <EmergencyHotlineBar />
 
             {/* Sticky Sub-Navigation Bar */}
             <div className="subnav-sticky-bar">
@@ -69,35 +81,35 @@ export default function DashboardPage() {
                         onClick={() => scrollTo('operational-overview')}
                     >
                         <Activity size={14} />
-                        <span>1. Overview</span>
+                        <span>{t.sections.overview}</span>
                     </button>
                     <button 
                         className={`subnav-pill ${activeSection === 'gis-map-section' ? 'active' : ''}`}
                         onClick={() => scrollTo('gis-map-section')}
                     >
                         <Map size={14} />
-                        <span>2. Geo-Hazard GIS</span>
+                        <span>{t.sections.gisMap}</span>
                     </button>
                     <button 
                         className={`subnav-pill ${activeSection === 'incident-feed-section' ? 'active' : ''}`}
                         onClick={() => scrollTo('incident-feed-section')}
                     >
                         <Radio size={14} />
-                        <span>3. Ground Truth Feed</span>
+                        <span>{t.sections.feed}</span>
                     </button>
                     <button 
                         className={`subnav-pill ${activeSection === 'report-tracker-section' ? 'active' : ''}`}
                         onClick={() => scrollTo('report-tracker-section')}
                     >
                         <Send size={14} />
-                        <span>4. Citizen Portal</span>
+                        <span>{t.sections.report}</span>
                     </button>
                     <button 
                         className={`subnav-pill ${activeSection === 'civic-trust-section' ? 'active' : ''}`}
                         onClick={() => scrollTo('civic-trust-section')}
                     >
                         <Award size={14} />
-                        <span>5. Sentinel Trust</span>
+                        <span>{t.sections.trust}</span>
                     </button>
                 </div>
             </div>
@@ -115,9 +127,9 @@ export default function DashboardPage() {
             <footer className="dashboard-footer">
                 <div className="footer-container">
                     <div className="footer-left">
-                        <span className="footer-brand">SURAKSHA-NET</span>
+                        <span className="footer-brand">{t.app.title}</span>
                         <span className="footer-tagline">
-                            Ministry of Earth Sciences (MoES) & IMD Validated Ground Truth Framework
+                            {t.app.authorityBadge}
                         </span>
                     </div>
                     <div className="footer-right">
@@ -132,6 +144,7 @@ export default function DashboardPage() {
             <ActionModal />
             <ForensicsModal />
             <SimulationModal />
+            <BroadcastModal />
 
             {/* Live Floating Toast Notification */}
             {notification && (
@@ -146,3 +159,4 @@ export default function DashboardPage() {
         </div>
     );
 }
+

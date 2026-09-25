@@ -1,9 +1,11 @@
 /**
  * Incident Feed Section (Section 3: Verified Ground Truth Stream)
  * De-cluttered 2-column card layout with AI rumor forensics and instant action triggers
+ * Enhanced with dual-language support, speech synthesis readout, and quick sharing
  */
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext.jsx';
+import { translations } from '../i18n/index.js';
 import { 
     formatDate, 
     formatRelativeTime, 
@@ -22,7 +24,11 @@ import {
     Cpu, 
     CheckCircle, 
     XCircle,
-    CopyCheck
+    CopyCheck,
+    Volume2,
+    VolumeX,
+    Share2,
+    Check
 } from 'lucide-react';
 
 export default function IncidentFeedSection() {
@@ -32,11 +38,69 @@ export default function IncidentFeedSection() {
         focusIncidentOnMap, 
         openForensics, 
         openActionModal,
-        verifyReport 
+        verifyReport,
+        language,
+        showToast
     } = useApp();
+
+    const t = translations[language] || translations.en;
 
     const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'VERIFIED' | 'CRITICAL' | 'RUMORS'
     const [searchTerm, setSearchTerm] = useState('');
+    const [speakingId, setSpeakingId] = useState(null);
+    const [copiedId, setCopiedId] = useState(null);
+
+    // Text to Speech Accessibility for Emergency Reports
+    const handleReadAloud = (feature) => {
+        const p = feature.properties || {};
+        if (!('speechSynthesis' in window)) {
+            showToast('warning', 'Speech synthesis is not supported in this browser.');
+            return;
+        }
+
+        if (speakingId === p.id) {
+            window.speechSynthesis.cancel();
+            setSpeakingId(null);
+            return;
+        }
+
+        window.speechSynthesis.cancel();
+        const textToRead = `${p.title}. ${p.description}. Severity: ${p.severity}. Location: ${p.city || 'Indore'}.`;
+        const utterance = new SpeechSynthesisUtterance(textToRead);
+        utterance.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
+        utterance.rate = 0.95;
+
+        utterance.onend = () => setSpeakingId(null);
+        utterance.onerror = () => setSpeakingId(null);
+
+        setSpeakingId(p.id);
+        window.speechSynthesis.speak(utterance);
+    };
+
+    // Quick Share or Copy Incident Details
+    const handleShare = async (feature) => {
+        const p = feature.properties || {};
+        const shareData = {
+            title: `SURAKSHA-NET: ${p.title}`,
+            text: `[EMERGENCY GROUND TRUTH] ${p.title} - Severity: ${p.severity}. Location: ${p.city || 'Indore'}. Details: ${p.description}`,
+            url: window.location.href
+        };
+
+        if (navigator.share) {
+            try {
+                await navigator.share(shareData);
+                return;
+            } catch (err) {
+                // Ignore user abort
+            }
+        }
+
+        // Fallback to clipboard
+        navigator.clipboard.writeText(`${shareData.text} | ${shareData.url}`);
+        setCopiedId(p.id);
+        showToast('success', language === 'hi' ? 'आपदा चेतावनी लिंक कॉपी किया गया' : 'Emergency alert link copied to clipboard');
+        setTimeout(() => setCopiedId(null), 2500);
+    };
 
     const filteredReports = reports.filter(item => {
         const p = item.properties || {};
@@ -63,11 +127,11 @@ export default function IncidentFeedSection() {
     return (
         <section id="incident-feed-section" className="section-container incident-feed-section">
             <div className="section-header-meta">
-                <span className="section-eyebrow">Crowdsourced Ground Observation</span>
-                <h2 className="section-title">Verified Ground-Truth Incident Stream</h2>
-                <p className="section-desc">
-                    Real-time field reports synthesized with automated pHash image deduplication, LLM sentiment audit, and commander verification.
-                </p>
+                <span className="section-eyebrow">
+                    {language === 'hi' ? 'नागरिक जमीनी अवलोकन' : 'Crowdsourced Ground Observation'}
+                </span>
+                <h2 className="section-title">{t.feed.title}</h2>
+                <p className="section-desc">{t.feed.desc}</p>
             </div>
 
             {/* Filter Bar & Search */}
@@ -77,25 +141,25 @@ export default function IncidentFeedSection() {
                         className={`feed-tab-btn ${activeTab === 'ALL' ? 'active' : ''}`}
                         onClick={() => setActiveTab('ALL')}
                     >
-                        All Feeds ({reports.length})
+                        {t.feed.all} ({reports.length})
                     </button>
                     <button 
                         className={`feed-tab-btn ${activeTab === 'VERIFIED' ? 'active' : ''}`}
                         onClick={() => setActiveTab('VERIFIED')}
                     >
-                        Verified Ground Truth
+                        {t.feed.verified}
                     </button>
                     <button 
                         className={`feed-tab-btn ${activeTab === 'CRITICAL' ? 'active' : ''}`}
                         onClick={() => setActiveTab('CRITICAL')}
                     >
-                        Critical Urgency
+                        {t.feed.critical}
                     </button>
                     <button 
                         className={`feed-tab-btn ${activeTab === 'RUMORS' ? 'active' : ''}`}
                         onClick={() => setActiveTab('RUMORS')}
                     >
-                        Debunked Rumors
+                        {t.feed.rumors}
                     </button>
                 </div>
 
@@ -103,7 +167,7 @@ export default function IncidentFeedSection() {
                     <Search size={16} className="search-icon" />
                     <input 
                         type="text"
-                        placeholder="Filter by keyword, locality, or hazard..."
+                        placeholder={t.feed.searchPlaceholder}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="feed-search-input"
@@ -121,6 +185,8 @@ export default function IncidentFeedSection() {
                     const badgeMeta = getBadgeDetails(p.reporterBadge);
 
                     const isRumor = p.isRumor || p.rumorScore > 0.6;
+                    const isSpeaking = speakingId === p.id;
+                    const isCopied = copiedId === p.id;
 
                     return (
                         <div key={p.id || Math.random()} className={`incident-card ${isRumor ? 'card-rumor' : ''}`}>
@@ -138,7 +204,28 @@ export default function IncidentFeedSection() {
                                         {statStyle.label}
                                     </span>
                                 </div>
-                                <span className="tracking-id-text">{p.trackingId || `REP-${p.id}`}</span>
+                                
+                                <div className="card-top-actions">
+                                    {/* Text to Speech audio button */}
+                                    <button 
+                                        className={`card-util-icon-btn ${isSpeaking ? 'active-audio' : ''}`}
+                                        onClick={() => handleReadAloud(feature)}
+                                        title={isSpeaking ? "Stop audio readout" : "Listen to incident"}
+                                    >
+                                        {isSpeaking ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                                    </button>
+
+                                    {/* Share Button */}
+                                    <button 
+                                        className="card-util-icon-btn"
+                                        onClick={() => handleShare(feature)}
+                                        title="Share or copy emergency alert"
+                                    >
+                                        {isCopied ? <Check size={15} className="text-success" /> : <Share2 size={15} />}
+                                    </button>
+
+                                    <span className="tracking-id-text">{p.trackingId || `REP-${p.id}`}</span>
+                                </div>
                             </div>
 
                             {/* Card Title & Content */}
@@ -149,14 +236,20 @@ export default function IncidentFeedSection() {
                             {p.duplicateFlag && (
                                 <div className="duplicate-alert-banner">
                                     <CopyCheck size={14} className="text-warning" />
-                                    <span>Recycled crisis image detected via pHash matching</span>
+                                    <span>
+                                        {language === 'hi' 
+                                            ? 'pHash मिलान द्वारा पुरानी / भ्रामक छवि पाई गई' 
+                                            : 'Recycled crisis image detected via pHash matching'}
+                                    </span>
                                 </div>
                             )}
 
                             {/* AI Verification & Sentinel Trust Bar */}
                             <div className="card-trust-metadata">
                                 <div className="metadata-item">
-                                    <span className="metadata-label">Reporter</span>
+                                    <span className="metadata-label">
+                                        {language === 'hi' ? 'नागरिक' : 'Reporter'}
+                                    </span>
                                     <div className="reporter-chip">
                                         <span>{badgeMeta.icon}</span>
                                         <span className="reporter-name">{p.reportedBy || 'citizen_scout'}</span>
@@ -165,7 +258,9 @@ export default function IncidentFeedSection() {
                                 </div>
 
                                 <div className="metadata-item">
-                                    <span className="metadata-label">AI Rumor Risk</span>
+                                    <span className="metadata-label">
+                                        {language === 'hi' ? 'AI अफवाह जोखिम' : 'AI Rumor Risk'}
+                                    </span>
                                     <div className="rumor-meter-wrapper">
                                         <div 
                                             className="rumor-meter-fill"
@@ -181,7 +276,9 @@ export default function IncidentFeedSection() {
                                 </div>
 
                                 <div className="metadata-item">
-                                    <span className="metadata-label">Time</span>
+                                    <span className="metadata-label">
+                                        {language === 'hi' ? 'समय' : 'Time'}
+                                    </span>
                                     <span className="metadata-value">{formatRelativeTime(p.createdAt)}</span>
                                 </div>
                             </div>
@@ -193,7 +290,7 @@ export default function IncidentFeedSection() {
                                     onClick={() => focusIncidentOnMap(feature)}
                                 >
                                     <Navigation size={14} />
-                                    <span>Focus Map</span>
+                                    <span>{t.feed.focusMap}</span>
                                 </button>
 
                                 <button 
@@ -201,7 +298,7 @@ export default function IncidentFeedSection() {
                                     onClick={() => openForensics(feature)}
                                 >
                                     <Cpu size={14} />
-                                    <span>AI Forensics</span>
+                                    <span>{t.feed.forensics}</span>
                                 </button>
 
                                 {activeRole === 'OPS_DISPATCHER' && (
@@ -210,7 +307,7 @@ export default function IncidentFeedSection() {
                                             className="card-btn btn-dispatch"
                                             onClick={() => openActionModal(feature)}
                                         >
-                                            Dispatch Squad
+                                            {t.feed.dispatch}
                                         </button>
 
                                         {p.status !== 'ADMIN_VERIFIED' && !isRumor && (
@@ -242,7 +339,11 @@ export default function IncidentFeedSection() {
                 {filteredReports.length === 0 && (
                     <div className="empty-feed-placeholder">
                         <AlertCircle size={32} className="text-secondary" />
-                        <p>No incidents match the active search or filter criteria.</p>
+                        <p>
+                            {language === 'hi' 
+                                ? 'खोज या फ़िल्टर के अनुसार कोई घटना नहीं मिली।' 
+                                : 'No incidents match the active search or filter criteria.'}
+                        </p>
                     </div>
                 )}
             </div>

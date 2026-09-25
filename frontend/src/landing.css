@@ -1809,3 +1809,729 @@
 .scenario-name {
     font-size: 0.95rem;
     font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.scenario-desc {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.scenario-card-content {
+    flex: 1;
+}
+
+/* ==========================================================================
+   ENHANCED FEATURES: SACHET TICKER, EMERGENCY HOTLINES, RADIUS & BROADCAST
+   ========================================================================== */
+
+/* ---------------- NDMA SACHET Live Broadcast Ticker ---------------- */
+.sachet-ticker-bar {
+    background: linear-gradient(90deg, #DC2626 0%, #B91C1C 50%, #991B1B 100%);
+    color: #FFFFFF;
+    font-size: 0.82rem;
+    font-weight: 500;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    position: relative;
+    z-index: 990;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
+}
+
+.sachet-ticker-container {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 6px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.sachet-live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background-color: rgba(0, 0, 0, 0.35);
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    text-transform: uppercase;
+}
+
+.sachet-live-dot {
+    width: 7px;
+    height: 7px;
+    background-color: #FEF08A;
+    border-radius: 50%;
+    animation: pulse-ring 1.4s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+}
+
+.sachet-ticker-track {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    white-space: nowrap;
+}
+
+.sachet-marquee-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 32px;
+    animation: marquee-scroll 38s linear infinite;
+}
+
+.sachet-marquee-content:hover {
+    animation-play-state: paused;
+}
+
+@keyframes marquee-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+
+.sachet-alert-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sachet-alert-severity {
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.68rem;
+    background: rgba(255, 255, 255, 0.22);
+    letter-spacing: 0.04em;
+}
+
+.sachet-alert-severity.critical, .sachet-alert-severity.severe {
+    background: #7F1D1D;
+    color: #FEE2E2;
+}
+
+.sachet-alert-headline {
+    font-weight: 600;
+}
+
+.sachet-alert-region {
+    opacity: 0.85;
+    font-size: 0.76rem;
+}
+
+.sachet-details-toggle {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: #FFFFFF;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.15s ease;
+    flex-shrink: 0;
+}
+
+.sachet-details-toggle:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.sachet-expanded-drawer {
+    background-color: var(--surface-card);
+    border-bottom: 2px solid var(--border-subtle);
+    padding: 16px 24px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    animation: slideDown 0.2s ease-out;
+}
+
+.sachet-drawer-inner {
+    max-width: 1240px;
+    margin: 0 auto;
+}
+
+.sachet-drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.sachet-drawer-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.sachet-alerts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.sachet-drawer-card {
+    background-color: var(--surface-subtle);
+    border: 1px solid var(--border-subtle);
+    border-left: 4px solid #DC2626;
+    border-radius: var(--radius-md);
+    padding: 12px;
+}
+
+.sachet-drawer-card.severe {
+    border-left-color: #EA580C;
+}
+
+.sachet-drawer-card.moderate {
+    border-left-color: #D97706;
+}
+
+.sachet-card-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--text-muted);
+}
+
+.sachet-card-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.sachet-card-desc {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* ---------------- Emergency Hotline Speed-Dial Bar ---------------- */
+.hotline-bar {
+    background-color: var(--surface-card);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 8px 0;
+}
+
+.hotline-container {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    overflow-x: auto;
+}
+
+.hotline-title-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #DC2626;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.hotline-chips-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
+.hotline-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background-color: var(--surface-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    padding: 4px 10px;
+    font-size: 0.76rem;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.hotline-chip:hover {
+    border-color: #DC2626;
+    background-color: rgba(220, 38, 38, 0.05);
+}
+
+.hotline-chip.critical-highlight {
+    background-color: rgba(220, 38, 38, 0.08);
+    border-color: rgba(220, 38, 38, 0.3);
+}
+
+.hotline-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.hotline-number {
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--surface-card);
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+}
+
+.hotline-call-link {
+    color: #DC2626;
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    border-radius: 4px;
+    transition: transform 0.1s ease;
+}
+
+.hotline-call-link:hover {
+    transform: scale(1.15);
+}
+
+.hotline-copy-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    border-radius: 4px;
+}
+
+.hotline-copy-btn:hover {
+    color: var(--brand-primary);
+}
+
+/* ---------------- GIS Map Radius Slider & Shelter Banner ---------------- */
+.map-radius-control-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    padding: 4px 12px;
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-sm);
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.radius-slider-input {
+    width: 80px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--border-subtle);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.radius-slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--brand-primary);
+    cursor: pointer;
+    border: 2px solid #FFFFFF;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.radius-value-tag {
+    color: var(--brand-primary);
+    font-weight: 700;
+    min-width: 32px;
+}
+
+.map-shelter-route-banner {
+    position: absolute;
+    bottom: 24px;
+    left: 24px;
+    right: 24px;
+    background-color: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+    padding: 14px 18px;
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    animation: slideUp 0.25s ease-out;
+    backdrop-filter: blur(8px);
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.shelter-banner-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.shelter-badge-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-md);
+    background-color: var(--brand-success-subtle);
+    color: var(--brand-success);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.shelter-banner-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.shelter-banner-meta {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    display: flex;
+    gap: 8px;
+}
+
+.shelter-banner-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.shelter-close-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: var(--radius-pill);
+}
+
+.shelter-close-btn:hover {
+    color: var(--text-primary);
+    background: var(--surface-subtle);
+}
+
+/* ---------------- Audio Readout & Sharing Buttons in Cards ---------------- */
+.card-top-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.card-util-icon-btn {
+    background: var(--surface-subtle);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-pill);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.card-util-icon-btn:hover {
+    color: var(--text-primary);
+    background: var(--surface-hover);
+    border-color: var(--brand-primary);
+}
+
+.card-util-icon-btn.active-audio {
+    background-color: var(--brand-primary-subtle);
+    color: var(--brand-primary);
+    border-color: var(--brand-primary);
+    animation: pulse-ring 1s infinite;
+}
+
+/* ---------------- Quick Shelter Assistant inside Report Section ---------------- */
+.shelter-quick-assistant-card {
+    margin-top: 18px;
+    background: linear-gradient(135deg, rgba(24, 119, 242, 0.04) 0%, rgba(49, 162, 76, 0.06) 100%);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+}
+
+.shelter-assistant-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.assistant-title-group {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.assistant-heading {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.assistant-sub {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.shelter-quick-trigger-btn {
+    background-color: var(--brand-primary);
+    color: #FFFFFF;
+    border: none;
+    padding: 6px 14px;
+    border-radius: var(--radius-pill);
+    font-size: 0.78rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    flex-shrink: 0;
+}
+
+.shelter-quick-trigger-btn:hover {
+    background-color: var(--brand-primary-hover);
+}
+
+.shelter-quick-result {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background-color: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.shelter-result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.shelter-result-name {
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: var(--text-primary);
+}
+
+.shelter-result-dist {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--brand-success);
+    background-color: var(--brand-success-subtle);
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+}
+
+.shelter-result-details {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+}
+
+/* ---------------- Location Selector & Anchor Tag in Form ---------------- */
+.location-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.city-anchor-tag {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--brand-primary);
+    background-color: var(--brand-primary-subtle);
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+}
+
+/* ---------------- Broadcast Modal Dialog ---------------- */
+.modal-broadcast-dialog {
+    max-width: 600px;
+    width: 100%;
+}
+
+.broadcast-channels-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.channel-checkbox-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background-color: var(--surface-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.channel-checkbox-card:hover {
+    border-color: var(--brand-primary);
+}
+
+.channel-checkbox-card.selected {
+    background-color: var(--brand-primary-subtle);
+    border-color: var(--brand-primary);
+}
+
+.channel-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.siren-level-group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.siren-level-btn {
+    padding: 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-subtle);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.siren-level-btn.active.green {
+    background-color: #DCFCE7;
+    border-color: #22C55E;
+    color: #15803D;
+}
+
+.siren-level-btn.active.yellow {
+    background-color: #FEF3C7;
+    border-color: #F59E0B;
+    color: #B45309;
+}
+
+.siren-level-btn.active.red {
+    background-color: #FEE2E2;
+    border-color: #EF4444;
+    color: #B91C1C;
+}
+
+.broadcast-target-preview {
+    background-color: var(--surface-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+/* ---------------- Bilingual Switcher & City Selector Dropdown in Navbar ---------------- */
+.lang-toggle-btn {
+    background-color: var(--surface-subtle);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+}
+
+.lang-toggle-btn:hover {
+    background-color: var(--surface-hover);
+    border-color: var(--brand-primary);
+}
+
+.city-selector-group {
+    display: flex;
+    align-items: center;
+    background-color: var(--surface-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    padding: 2px 10px;
+    gap: 6px;
+}
+
+.city-select {
+    background: transparent;
+    border: none;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    outline: none;
+    cursor: pointer;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    .sachet-ticker-container {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+    
+    .hotline-chips-group {
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
+    
+    .map-shelter-route-banner {
+        flex-direction: column;
+        align-items: flex-start;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+    }
+    
+    .siren-level-group {
+        grid-template-columns: 1fr;
+    }
+}

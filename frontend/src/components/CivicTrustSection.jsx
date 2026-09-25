@@ -5,11 +5,13 @@
  */
 import React from 'react';
 import { useApp } from '../context/AppContext.jsx';
+import { translations } from '../i18n/index.js';
 import { getBadgeDetails } from '../utils/formatters.js';
 import { Award, ShieldCheck, Star, Users, Flame, CheckCircle, TrendingUp } from 'lucide-react';
 
 export default function CivicTrustSection() {
-    const { leaderboard } = useApp();
+    const { leaderboard, language, selectedCity } = useApp();
+    const t = translations[language] || translations.en;
 
     // Active User profile (Arun Sharma - Disaster Sentinel)
     const currentUser = leaderboard[0] || {
@@ -25,11 +27,11 @@ export default function CivicTrustSection() {
     return (
         <section id="civic-trust-section" className="section-container civic-trust-section">
             <div className="section-header-meta">
-                <span className="section-eyebrow">Civic Gamification & Reliability</span>
-                <h2 className="section-title">Sentinel Trust & Community Leaderboard</h2>
-                <p className="section-desc">
-                    Anti-disinformation trust framework rewarding citizens who report verified ground conditions and penalizing panic-inducing falsehoods.
-                </p>
+                <span className="section-eyebrow">
+                    {language === 'hi' ? 'नागरिक प्रतिष्ठा एवं विश्वसनीयता' : 'Civic Gamification & Reliability'}
+                </span>
+                <h2 className="section-title">{t.trust.title}</h2>
+                <p className="section-desc">{t.trust.desc}</p>
             </div>
 
             <div className="civic-trust-grid">
@@ -50,7 +52,7 @@ export default function CivicTrustSection() {
                     {/* Trust Score Meter */}
                     <div className="trust-meter-container">
                         <div className="trust-meter-header">
-                            <span className="trust-meter-label">Civic Trust Index</span>
+                            <span className="trust-meter-label">{t.trust.meterLabel}</span>
                             <span className="trust-score-val">{currentUser.score} / 100</span>
                         </div>
                         <div className="trust-progress-track">
@@ -60,7 +62,9 @@ export default function CivicTrustSection() {
                             />
                         </div>
                         <span className="trust-meter-subtext">
-                            Top 1% Citizen Reporter in Madhya Pradesh
+                            {language === 'hi' 
+                                ? `शीर्ष 1% विश्वसनीय नागरिक रिपोर्टर (${selectedCity.state})`
+                                : `Top 1% Citizen Reporter in ${selectedCity.state}`}
                         </span>
                     </div>
 
@@ -68,27 +72,51 @@ export default function CivicTrustSection() {
                     <div className="sentinel-stats-row">
                         <div className="stat-box">
                             <span className="stat-number">{currentUser.verifiedCount}</span>
-                            <span className="stat-label">Verified Reports</span>
+                            <span className="stat-label">{t.trust.verifiedReports}</span>
                         </div>
                         <div className="stat-box">
                             <span className="stat-number">0</span>
-                            <span className="stat-label">False Alarms</span>
+                            <span className="stat-label">{t.trust.falseAlarms}</span>
                         </div>
                         <div className="stat-box">
-                            <span className="stat-number">Rank #1</span>
-                            <span className="stat-label">Metro Leaderboard</span>
+                            <span className="stat-number">#1</span>
+                            <span className="stat-label">
+                                {language === 'hi' ? 'शहरी रैंक' : 'Metro Rank'}
+                            </span>
                         </div>
                     </div>
 
                     {/* Badge Catalog Hierarchy */}
                     <div className="badge-catalog-preview">
-                        <h4 className="catalog-title">Badge Progression Hierarchy</h4>
+                        <h4 className="catalog-title">
+                            {language === 'hi' ? 'बैज उन्नयन पदानुक्रम' : 'Badge Progression Hierarchy'}
+                        </h4>
                         <div className="badge-steps-list">
                             {[
-                                { tier: 'NOVICE_SCOUT', name: 'Novice Scout', pts: '0-49 pts', icon: '🌱' },
-                                { tier: 'ACTIVE_SCOUT', name: 'Active Scout', pts: '50-74 pts', icon: '🧭' },
-                                { tier: 'DISASTER_SENTINEL', name: 'Disaster Sentinel', pts: '75-89 pts', icon: '🎖️' },
-                                { tier: 'CRISIS_GUARDIAN', name: 'Crisis Guardian', pts: '90+ pts', icon: '🛡️' }
+                                { 
+                                    tier: 'NOVICE_SCOUT', 
+                                    name: language === 'hi' ? 'नौसिखिया स्काउट' : 'Novice Scout', 
+                                    pts: '0-49 pts', 
+                                    icon: '🌱' 
+                                },
+                                { 
+                                    tier: 'ACTIVE_SCOUT', 
+                                    name: language === 'hi' ? 'सक्रिय स्काउट' : 'Active Scout', 
+                                    pts: '50-74 pts', 
+                                    icon: '🧭' 
+                                },
+                                { 
+                                    tier: 'DISASTER_SENTINEL', 
+                                    name: language === 'hi' ? 'आपदा प्रहरी' : 'Disaster Sentinel', 
+                                    pts: '75-89 pts', 
+                                    icon: '🎖️' 
+                                },
+                                { 
+                                    tier: 'CRISIS_GUARDIAN', 
+                                    name: language === 'hi' ? 'संकट संरक्षक' : 'Crisis Guardian', 
+                                    pts: '90+ pts', 
+                                    icon: '🛡️' 
+                                }
                             ].map((b) => (
                                 <div key={b.tier} className={`badge-step-item ${currentUser.score >= parseInt(b.pts) ? 'unlocked' : ''}`}>
                                     <span className="badge-step-icon">{b.icon}</span>
@@ -107,20 +135,20 @@ export default function CivicTrustSection() {
                     <div className="table-card-header">
                         <div className="table-header-title">
                             <Users size={18} className="text-brand-primary" />
-                            <h3 className="card-heading">Top Verified Field Sentinels</h3>
+                            <h3 className="card-heading">{t.trust.tableHeading}</h3>
                         </div>
-                        <span className="table-subtitle">Indore & Malwa Region</span>
+                        <span className="table-subtitle">{selectedCity.name} & {selectedCity.state}</span>
                     </div>
 
                     <div className="leaderboard-table-wrapper">
                         <table className="sentinel-table">
                             <thead>
                                 <tr>
-                                    <th>Rank</th>
-                                    <th>Sentinel</th>
-                                    <th>Tier</th>
-                                    <th>Verified</th>
-                                    <th>Trust Score</th>
+                                    <th>{language === 'hi' ? 'रैंक' : 'Rank'}</th>
+                                    <th>{language === 'hi' ? 'प्रहरी' : 'Sentinel'}</th>
+                                    <th>{language === 'hi' ? 'श्रेणी' : 'Tier'}</th>
+                                    <th>{language === 'hi' ? 'सत्यापित' : 'Verified'}</th>
+                                    <th>{language === 'hi' ? 'स्कोर' : 'Trust Score'}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -163,3 +191,4 @@ export default function CivicTrustSection() {
         </section>
     );
 }
+
