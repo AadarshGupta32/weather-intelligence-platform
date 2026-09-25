@@ -5,6 +5,12 @@ target/
 *.ear
 *.class
 
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
 # Python
 __pycache__/
 *.pyc
@@ -12,12 +18,14 @@ __pycache__/
 venv/
 .env
 
-# IDEs
+# IDEs & System
 .idea/
 *.iml
 .vscode/
 *.ipr
 *.iws
+.DS_Store
+*/.DS_Store
 
 # Uploads & logs
 backend/uploads/
