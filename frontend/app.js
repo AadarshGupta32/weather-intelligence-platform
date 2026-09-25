@@ -1,953 +1,739 @@
 /**
- * SURAKSHA-NET: National Weather Intelligence & Emergency Response Platform
- * Meta-Minimalist Architecture & Section-Based Controller
+ * SURAKSHA-NET: Real-Time Weather Intelligence & Emergency Response Platform
+ * Frontend GIS Command Center & Citizen Portal (Phase 2 Advanced Intelligence)
  */
 
 const API_BASE = 'http://localhost:8080';
-
-// Global GIS and Map State
 let map;
 let geoJsonLayer;
 let sheltersLayer;
 let radarLayer = null;
-let evacuationRouteLine = null;
-let baseTileLayers = {};
-let currentBaseLayer = 'osm';
-
-// Global Data State
-let reportsData = [];
-let sheltersData = [];
-let activeReportForAction = null;
+let radiusCircle = null;
 let stompClient = null;
 let audioEnabled = true;
-let voiceEnabled = true;
+let reportsData = [];
+let activeReportForAction = null;
 let isRadarActive = false;
 let isSheltersActive = true;
-let currentRoleView = 'citizen';
-let currentMapFilter = '';
+let isSachetActive = true;
+let sachetLayer = null;
+let currentTelemetryCity = 'Indore';
+let indiaCities = []; // Loaded from backend /api/cities/india (GeoNames-backed)
+let nationalAlerts = []; // Loaded from backend /api/alerts/national (NDMA SACHET)
 
-// Realistic Mock Fallback Data (Guarantees clean display even if backend is offline)
-const MOCK_REPORTS = [
-    {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [75.8937, 22.7533] },
-        properties: {
-            id: 1,
-            trackingId: "REP-VJ001",
-            title: "Severe Waterlogging near Vijay Nagar Square",
-            description: "Water level reached 3 feet near underpass. Stalled vehicles reported. Ground rescue teams diverted traffic via Ring Road.",
-            hazardType: "WATERLOGGING",
-            severity: "HIGH",
-            status: "ADMIN_VERIFIED",
-            city: "Indore",
-            district: "Indore",
-            reportedBy: "citizen_arun",
-            reporterBadge: "DISASTER_SENTINEL",
-            reporterTrustScore: 92.5,
-            rumorScore: 0.04,
-            isRumor: false,
-            sentiment: "OBJECTIVE_INFORMATIVE",
-            sourceType: "CITIZEN_MOBILE",
-            mediaUrl: "/uploads/ground_flood.jpg",
-            phash: "cccc3333ff333373",
-            duplicateFlag: false
-        }
-    },
-    {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [75.8577, 22.7196] },
-        properties: {
-            id: 2,
-            trackingId: "REP-RW002",
-            title: "Kahn River Overflow Alert near Rajwada Bridge",
-            description: "Kahn river overflowing banks following 95mm precipitation. Low-lying slum settlements inundated. Evacuation underway.",
-            hazardType: "FLASH_FLOOD",
-            severity: "CRITICAL",
-            status: "ACTIONED",
-            city: "Indore",
-            district: "Indore",
-            reportedBy: "citizen_priya",
-            reporterBadge: "ACTIVE_SCOUT",
-            reporterTrustScore: 78.0,
-            rumorScore: 0.06,
-            isRumor: false,
-            sentiment: "DISTRESSED_URGENT",
-            sourceType: "TWITTER_IMD",
-            mediaUrl: "/uploads/ground_flood.jpg",
-            phash: "1122334455667788",
-            duplicateFlag: false
-        }
-    },
-    {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [75.8839, 22.7244] },
-        properties: {
-            id: 3,
-            trackingId: "REP-PL003",
-            title: "Massive Banyan Tree Fallen on Main AB Road",
-            description: "High squall winds uprooted banyan tree near Industry House Palasia blocking carriage lanes. Municipal tree squad alerted.",
-            hazardType: "CYCLONE_WIND",
-            severity: "MEDIUM",
-            status: "AI_CHECKED",
-            city: "Indore",
-            district: "Indore",
-            reportedBy: "citizen_arun",
-            reporterBadge: "DISASTER_SENTINEL",
-            reporterTrustScore: 92.5,
-            rumorScore: 0.12,
-            isRumor: false,
-            sentiment: "OBSERVATIONAL_NEUTRAL",
-            sourceType: "CITIZEN_REPORT",
-            mediaUrl: "",
-            phash: null,
-            duplicateFlag: false
-        }
-    },
-    {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [75.8652, 22.6738] },
-        properties: {
-            id: 4,
-            trackingId: "REP-RM004",
-            title: "RUMOR: Bilawali Dam Collapsed 5000 Dead",
-            description: "BILAWALI DAM COLLAPSED COMPLETELY! RUN FOR LIVES! Contradicted by official radar & station telemetry at 0mm rain.",
-            hazardType: "FLASH_FLOOD",
-            severity: "CRITICAL",
-            status: "FALSE_ALARM",
-            city: "Indore",
-            district: "Indore",
-            reportedBy: "panic_bot_99",
-            reporterBadge: "NOVICE_SCOUT",
-            reporterTrustScore: 15.0,
-            rumorScore: 0.98,
-            isRumor: true,
-            sentiment: "PANIC_ALARMIST",
-            sourceType: "TWITTER_IMD",
-            mediaUrl: "",
-            phash: null,
-            duplicateFlag: false
-        }
-    }
-];
+// Standard Indian State & UT Centroids for national alerts
+const INDIAN_STATES_CENTROIDS = {
+    'andhra pradesh': { lat: 15.9129, lon: 79.7400, name: 'Andhra Pradesh' },
+    'arunachal pradesh': { lat: 28.2180, lon: 94.7278, name: 'Arunachal Pradesh' },
+    'assam': { lat: 26.2006, lon: 92.9376, name: 'Assam' },
+    'bihar': { lat: 25.0961, lon: 85.3131, name: 'Bihar' },
+    'chhattisgarh': { lat: 21.2787, lon: 81.8661, name: 'Chhattisgarh' },
+    'goa': { lat: 15.2993, lon: 74.1240, name: 'Goa' },
+    'gujarat': { lat: 22.2587, lon: 71.1924, name: 'Gujarat' },
+    'haryana': { lat: 29.0588, lon: 76.0856, name: 'Haryana' },
+    'himachal pradesh': { lat: 31.1048, lon: 77.1734, name: 'Himachal Pradesh' },
+    'jharkhand': { lat: 23.6102, lon: 85.2799, name: 'Jharkhand' },
+    'karnataka': { lat: 15.3173, lon: 75.7139, name: 'Karnataka' },
+    'kerala': { lat: 10.8505, lon: 76.2711, name: 'Kerala' },
+    'madhya pradesh': { lat: 22.9734, lon: 78.6569, name: 'Madhya Pradesh' },
+    'maharashtra': { lat: 19.7515, lon: 75.7139, name: 'Maharashtra' },
+    'manipur': { lat: 24.6637, lon: 93.9063, name: 'Manipur' },
+    'meghalaya': { lat: 25.4670, lon: 91.3662, name: 'Meghalaya' },
+    'mizoram': { lat: 23.1645, lon: 92.9376, name: 'Mizoram' },
+    'nagaland': { lat: 26.1584, lon: 94.5624, name: 'Nagaland' },
+    'odisha': { lat: 20.9517, lon: 85.0985, name: 'Odisha' },
+    'punjab': { lat: 31.1471, lon: 75.3412, name: 'Punjab' },
+    'rajasthan': { lat: 27.0238, lon: 74.2179, name: 'Rajasthan' },
+    'sikkim': { lat: 27.5330, lon: 88.5122, name: 'Sikkim' },
+    'tamil nadu': { lat: 11.1271, lon: 78.6569, name: 'Tamil Nadu' },
+    'telangana': { lat: 18.1124, lon: 79.0193, name: 'Telangana' },
+    'tripura': { lat: 23.9408, lon: 91.9882, name: 'Tripura' },
+    'uttar pradesh': { lat: 26.8467, lon: 80.9462, name: 'Uttar Pradesh' },
+    'uttarakhand': { lat: 30.0668, lon: 79.0193, name: 'Uttarakhand' },
+    'west bengal': { lat: 22.9868, lon: 87.8550, name: 'West Bengal' },
+    'delhi': { lat: 28.7041, lon: 77.1025, name: 'Delhi' },
+    'jammu and kashmir': { lat: 33.7782, lon: 76.5762, name: 'Jammu & Kashmir' },
+    'ladakh': { lat: 34.1526, lon: 77.5771, name: 'Ladakh' }
+};
 
-const MOCK_SHELTERS = [
-    { name: "Holkar Stadium Relief Camp", latitude: 22.7246, longitude: 75.8732, capacity: 1500, availableSlots: 320, type: "EVACUATION_CAMP", address: "Race Course Road, New Palasia, Indore", contactPhone: "+91-731-2544101" },
-    { name: "Nehru Stadium Safe Zone", latitude: 22.7092, longitude: 75.8758, capacity: 2000, availableSlots: 150, type: "EVACUATION_CAMP", address: "Residency Area, Indore", contactPhone: "+91-731-2700300" },
-    { name: "MY Hospital Trauma Response", latitude: 22.7164, longitude: 75.8705, capacity: 500, availableSlots: 110, type: "MEDICAL_CENTER", address: "Sanyogita Ganj, Indore", contactPhone: "+91-731-2527301" },
-    { name: "NDRF Kahn River Boat Depot", latitude: 22.7185, longitude: 75.8540, capacity: 50, availableSlots: 12, type: "NDRF_DEPOT", address: "Riverside Road, Rajwada, Indore", contactPhone: "1078" },
-    { name: "Scheme 54 Municipal Shelter", latitude: 22.7562, longitude: 75.8890, capacity: 800, availableSlots: 45, type: "EVACUATION_CAMP", address: "Vijay Nagar Sector A, Indore", contactPhone: "+91-731-2401122" }
-];
-
-const MOCK_LEADERBOARD = [
-    { username: "citizen_arun", fullName: "Arun Sharma", score: 92.5, badgeTier: "DISASTER_SENTINEL", verifiedCount: 13 },
-    { username: "citizen_priya", fullName: "Priya Patel", score: 78.0, badgeTier: "ACTIVE_SCOUT", verifiedCount: 7 },
-    { username: "scout_rahul", fullName: "Rahul Verma", score: 65.0, badgeTier: "ACTIVE_SCOUT", verifiedCount: 5 },
-    { username: "citizen_vikram", fullName: "Vikram Singh", score: 42.0, badgeTier: "NOVICE_SCOUT", verifiedCount: 2 }
-];
-
-// Initialize on DOM load
+// Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    // Check saved theme
-    if (localStorage.getItem('suraksha_theme') === 'dark') {
-        document.body.classList.add('dark-mode');
-    }
-
     initMap();
-    fetchTelemetry();
+    loadIndianCities();
+    fetchNationalAlerts();
+    fetchTelemetry(22.7196, 75.8577, 'Indore');
     fetchReportsGeoJson();
     fetchSheltersGeoJson();
     fetchLeaderboard();
     connectRealtimeStreams();
 
-    // Map click handler to fill coordinates in form
+    // Map click handler to populate GPS in citizen report form
     map.on('click', (e) => {
         const { lat, lng } = e.latlng;
-        const latInput = document.getElementById('form-lat');
-        const lonInput = document.getElementById('form-lon');
-        if (latInput && lonInput) {
-            latInput.value = lat.toFixed(5);
-            lonInput.value = lng.toFixed(5);
-        }
+        document.getElementById('rep-lat').value = lat.toFixed(5);
+        document.getElementById('rep-lon').value = lng.toFixed(5);
+
+        // Render micro-local radius circle on click
+        const radiusKm = parseFloat(document.getElementById('filter-radius').value) || 5;
+        drawRadiusCircle(lat, lng, radiusKm);
     });
 
-    setInterval(fetchTelemetry, 60000);
+    // Periodically refresh telemetry every 60s & SACHET alerts every 3m
+    setInterval(() => {
+        const coords = findCityCoords(currentTelemetryCity) || { lat: 22.7196, lon: 75.8577 };
+        fetchTelemetry(coords.lat, coords.lon, currentTelemetryCity);
+    }, 60000);
+    setInterval(fetchNationalAlerts, 180000);
 });
 
-/* ===================================================================
-   1. Focused GIS Map Initialization (Clean Viewport)
-   =================================================================== */
+/**
+ * 0. National City Directory (GeoNames-backed, via backend /api/cities/india)
+ */
+async function loadIndianCities() {
+    try {
+        const res = await fetch(`${API_BASE}/api/cities/india`);
+        if (!res.ok) throw new Error('Failed to fetch city directory');
+        indiaCities = await res.json();
+        console.log(`Loaded ${indiaCities.length} Indian cities from national directory`);
+        populateCityDatalist();
+        if (nationalAlerts && nationalAlerts.length > 0) {
+            renderSachetMapMarkers();
+        }
+    } catch (e) {
+        console.warn('City directory load warning:', e.message);
+    }
+}
+
+/**
+ * Populates global datalist for instant autocomplete in search & report form
+ */
+function populateCityDatalist() {
+    const datalist = document.getElementById('cities-datalist');
+    if (!datalist || !indiaCities || indiaCities.length === 0) return;
+    datalist.innerHTML = '';
+    indiaCities.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.name;
+        opt.label = `${c.name} (${c.state || 'India'})`;
+        datalist.appendChild(opt);
+    });
+}
+
+/**
+ * Look up a city's coordinates by name (case-insensitive) from directory or state centroids.
+ * Returns { lat, lon, state, name } or null if not found.
+ */
+function findCityCoords(cityName) {
+    if (!cityName) return null;
+    const clean = cityName.trim().toLowerCase();
+    if (indiaCities && indiaCities.length > 0) {
+        const match = indiaCities.find(
+            c => c.name && c.name.toLowerCase() === clean
+        );
+        if (match) {
+            return { lat: match.latitude, lon: match.longitude, state: match.state, name: match.name };
+        }
+    }
+    // Fallback to states dictionary
+    if (INDIAN_STATES_CENTROIDS[clean]) {
+        const s = INDIAN_STATES_CENTROIDS[clean];
+        return { lat: s.lat, lon: s.lon, state: s.name, name: s.name };
+    }
+    return null;
+}
+
+function onCitySelected(cityName) {
+    if (!cityName) return;
+    switchTelemetryToCity(cityName);
+}
+
+function onReportCitySelected(cityName) {
+    const coords = findCityCoords(cityName);
+    if (!coords) return;
+    const latInput = document.getElementById('rep-lat');
+    const lonInput = document.getElementById('rep-lon');
+    const distInput = document.getElementById('rep-district');
+    if (latInput) latInput.value = coords.lat.toFixed(4);
+    if (lonInput) lonInput.value = coords.lon.toFixed(4);
+    if (distInput && coords.state) distInput.value = coords.state;
+    map.panTo([coords.lat, coords.lon]);
+    drawRadiusCircle(coords.lat, coords.lon, 5);
+}
+
+/**
+ * Scan alert text to match known Indian cities or states
+ */
+function extractLocationFromAlert(alert) {
+    if (!alert) return null;
+    const text = `${alert.title || ''} ${alert.description || ''} ${alert.author || ''}`.toLowerCase();
+
+    // 1. Try finding a known city in the text (checking first 300 major cities)
+    if (indiaCities && indiaCities.length > 0) {
+        for (let i = 0; i < Math.min(indiaCities.length, 300); i++) {
+            const c = indiaCities[i];
+            if (c.name && c.name.length >= 4) {
+                const regex = new RegExp(`\\b${c.name.toLowerCase()}\\b`, 'i');
+                if (regex.test(text)) {
+                    return { name: c.name, lat: c.latitude, lon: c.longitude, isState: false };
+                }
+            }
+        }
+    }
+
+    // 2. Try finding a state in the text
+    for (const [stateKey, stateData] of Object.entries(INDIAN_STATES_CENTROIDS)) {
+        const regex = new RegExp(`\\b${stateKey}\\b`, 'i');
+        if (regex.test(text)) {
+            return { name: stateData.name, lat: stateData.lat, lon: stateData.lon, isState: true };
+        }
+    }
+
+    return null;
+}
+
+/**
+ * 0b. NDMA SACHET National Disaster Alert Feed
+ * Live RSS/CAP ingestion from backend /api/alerts/national
+ */
+async function fetchNationalAlerts() {
+    const list = document.getElementById('sachet-alerts-list');
+    const badge = document.getElementById('sachet-count-badge');
+    if (!list) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/alerts/national`);
+        if (!res.ok) throw new Error('Failed to fetch SACHET alerts');
+        const alerts = await res.json();
+        nationalAlerts = alerts || [];
+
+        if (badge) {
+            badge.innerText = `${nationalAlerts.length} Active Alerts`;
+        }
+
+        list.innerHTML = '';
+        if (nationalAlerts.length === 0) {
+            list.innerHTML = '<div style="color:#94a3b8; font-size:0.75rem; text-align:center; padding:12px;">No active national disaster advisories at this time.</div>';
+            return;
+        }
+
+        // Render up to 20 latest alerts
+        const displayAlerts = nationalAlerts.slice(0, 20);
+        displayAlerts.forEach((alert, idx) => {
+            const card = document.createElement('div');
+            card.className = 'sachet-alert-card clickable';
+
+            const rawTitle = alert.title || 'National Disaster Advisory';
+            const cleanTitle = escapeHtml(rawTitle);
+            const pubDateStr = alert.pubDate ? new Date(alert.pubDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : 'Live';
+            const link = alert.link || '#';
+            const author = alert.author ? escapeHtml(alert.author) : 'NDMA / IMD';
+
+            const matchedLoc = extractLocationFromAlert(alert);
+
+            card.innerHTML = `
+                <div class="sachet-alert-title">
+                    ⚠️ ${cleanTitle}
+                </div>
+                ${alert.description ? `<div style="font-size:0.72rem; color:#94a3b8; line-height:1.3;">${escapeHtml(alert.description)}</div>` : ''}
+                <div class="sachet-alert-meta">
+                    <span>⏱️ ${pubDateStr}</span>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        ${matchedLoc ? `<button class="btn btn-secondary btn-sm" style="padding:1px 5px; font-size:0.65rem;" onclick="event.stopPropagation(); switchTelemetryToCity('${escapeHtml(matchedLoc.name)}')">📍 ${escapeHtml(matchedLoc.name)}</button>` : ''}
+                        ${link !== '#' ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" class="sachet-alert-link" onclick="event.stopPropagation()">CAP Bulletin ↗</a>` : ''}
+                    </div>
+                </div>
+            `;
+
+            // Clicking card focuses on map
+            card.onclick = () => focusAlertOnMap(idx);
+            list.appendChild(card);
+        });
+
+        // Update the top navigation live ticker with the latest clean headline
+        const englishAlert = nationalAlerts.find(a => a.title && /[a-zA-Z]{5,}/.test(a.title));
+        if (englishAlert) {
+            const ticker = document.getElementById('live-ticker');
+            if (ticker) {
+                ticker.innerText = `NDMA SACHET: ${englishAlert.title}`;
+            }
+        }
+
+        // Plot interactive alert markers onto the Leaflet GIS map
+        renderSachetMapMarkers();
+
+    } catch (e) {
+        console.warn('SACHET alert fetch warning:', e.message);
+        if (badge) badge.innerText = 'Standby';
+        list.innerHTML = '<div style="color:#94a3b8; font-size:0.75rem; text-align:center; padding:8px;">Syncing with NDMA SACHET national feed...</div>';
+    }
+}
+
+/**
+ * Render SACHET Disaster Alert markers on GIS Map
+ */
+function renderSachetMapMarkers() {
+    if (!sachetLayer) return;
+    sachetLayer.clearLayers();
+    if (!isSachetActive || !nationalAlerts || nationalAlerts.length === 0) return;
+
+    nationalAlerts.forEach((alert, idx) => {
+        const loc = extractLocationFromAlert(alert);
+        if (!loc) return;
+
+        const marker = L.circleMarker([loc.lat, loc.lon], {
+            radius: 8,
+            fillColor: '#ef4444',
+            color: '#fee2e2',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.85
+        });
+
+        const cleanTitle = escapeHtml(alert.title || 'National Disaster Advisory');
+        const cleanDesc = alert.description ? escapeHtml(alert.description) : '';
+        const cleanAuthor = alert.author ? escapeHtml(alert.author) : 'NDMA SACHET / IMD';
+        const pubDateStr = alert.pubDate ? new Date(alert.pubDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Live';
+        const link = alert.link || '#';
+
+        const popupContent = `
+            <div class="sachet-popup-title">🚨 ${cleanTitle}</div>
+            <div class="sachet-popup-agency">🏛️ ${cleanAuthor} | ⏱️ ${pubDateStr}</div>
+            ${cleanDesc ? `<div class="sachet-popup-desc">${cleanDesc}</div>` : ''}
+            <div class="sachet-popup-actions">
+                <button class="sachet-popup-btn" onclick="switchTelemetryToCity('${escapeHtml(loc.name)}')">📍 Sensor: ${escapeHtml(loc.name)}</button>
+                ${link !== '#' ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; font-size:11px; text-decoration:none;">CAP Bulletin ↗</a>` : ''}
+            </div>
+        `;
+
+        marker.bindPopup(popupContent, { className: 'sachet-leaflet-popup', maxWidth: 320 });
+        marker.alertIndex = idx;
+        sachetLayer.addLayer(marker);
+    });
+}
+
+function focusAlertOnMap(index) {
+    const alert = nationalAlerts[index];
+    if (!alert) return;
+    const loc = extractLocationFromAlert(alert);
+    if (loc) {
+        map.flyTo([loc.lat, loc.lon], 9, { duration: 1.2 });
+        if (!loc.isState) {
+            switchTelemetryToCity(loc.name);
+        }
+        if (sachetLayer) {
+            sachetLayer.eachLayer(layer => {
+                if (layer.alertIndex === index) {
+                    layer.openPopup();
+                }
+            });
+        }
+    }
+}
+
+/**
+ * 1. GIS Leaflet Map Setup
+ */
 function initMap() {
     map = L.map('gis-map', {
-        center: [22.7196, 75.8577], // Center on Indore
-        zoom: 12,
+        center: [22.9734, 78.6569], // Centered on India (national view)
+        zoom: 5,
         zoomControl: true
     });
 
-    // 1. Street Map (Meta Soft Style)
-    baseTileLayers['osm'] = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Free OpenStreetMap Tiles (no API key required)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
+        subdomains: 'abc',
         maxZoom: 19
     }).addTo(map);
 
-    // 2. Muted Charcoal Tiles
-    baseTileLayers['dark'] = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; CartoDB',
-        subdomains: 'abcd',
-        maxZoom: 19
-    });
-
-    // 3. Satellite Hybrid
-    baseTileLayers['satellite'] = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: '&copy; Esri',
-        maxZoom: 18
-    });
-
-    // Incidents Layer with Compact, Clean Pins
+    // 1. Incidents Layer
     geoJsonLayer = L.geoJSON(null, {
         pointToLayer: (feature, latlng) => {
-            const p = feature.properties;
-            const color = getPinColor(p);
-            const isCritical = p.severity === 'CRITICAL' && !p.isRumor && p.status !== 'FALSE_ALARM';
-
+            const markerColor = getMarkerColor(feature.properties);
             return L.circleMarker(latlng, {
-                radius: isCritical ? 9 : 7,
-                fillColor: color,
+                radius: feature.properties.severity === 'CRITICAL' ? 10 : 7,
+                fillColor: markerColor,
                 color: '#ffffff',
-                weight: 2,
+                weight: 1.5,
                 opacity: 1,
-                fillOpacity: 0.95
+                fillOpacity: 0.85
             });
         },
         onEachFeature: (feature, layer) => {
-            layer.bindPopup(createMapPopover(feature.properties));
+            layer.bindPopup(createPopupContent(feature.properties));
+            layer.on('click', () => {
+                const [lon, lat] = feature.geometry.coordinates;
+                const radiusKm = parseFloat(document.getElementById('filter-radius').value) || 5;
+                drawRadiusCircle(lat, lon, radiusKm);
+            });
         }
     }).addTo(map);
 
-    // Safe Shelters Layer
+    // 2. Safe Shelters Layer
     sheltersLayer = L.geoJSON(null, {
         pointToLayer: (feature, latlng) => {
             return L.circleMarker(latlng, {
                 radius: 8,
-                fillColor: '#31A24C',
-                color: '#ffffff',
+                fillColor: '#10b981',
+                color: '#d1fae5',
                 weight: 2,
                 opacity: 1,
-                fillOpacity: 0.95
+                fillOpacity: 0.9
             });
         },
         onEachFeature: (feature, layer) => {
             const p = feature.properties;
             layer.bindPopup(`
-                <div style="font-family:'Inter',sans-serif; color:#050505; min-width:200px;">
-                    <div style="font-weight:800; font-size:12px; color:#31A24C; border-bottom:1px solid #E4E6EB; padding-bottom:4px;">
-                        ⛺ ${escapeHtml(p.name)}
-                    </div>
-                    <div style="font-size:11px; margin-top:4px; color:#65676B;">
-                        Type: <strong>${escapeHtml(p.type)}</strong>
-                    </div>
-                    <div style="font-size:11px; margin-top:2px;">
-                        Available: <strong style="color:#31A24C;">${p.availableSlots} / ${p.capacity}</strong> slots
-                    </div>
-                    <div style="font-size:11px; margin-top:2px; color:#65676B;">
-                        📞 Helpline: <strong>${escapeHtml(p.contactPhone || '1077')}</strong>
-                    </div>
+                <div style="font-family:'Inter',sans-serif; color:#0f172a; min-width:200px;">
+                    <div style="font-weight:bold; font-size:12px; color:#065f46;">⛺ ${escapeHtml(p.name)}</div>
+                    <div style="font-size:10px; color:#64748b;">${escapeHtml(p.type)} | Available: <strong>${p.availableSlots} / ${p.capacity}</strong></div>
+                    <div style="font-size:11px; margin-top:4px;">📍 ${escapeHtml(p.address || '')}</div>
+                    <div style="font-size:11px; margin-top:2px;">📞 ${escapeHtml(p.contactPhone || '1077')}</div>
                 </div>
             `);
         }
     }).addTo(map);
+
+    // 3. SACHET National Alerts Layer
+    sachetLayer = L.layerGroup().addTo(map);
 }
 
-function changeBaseMap(layerKey) {
-    if (layerKey === currentBaseLayer) return;
-    map.removeLayer(baseTileLayers[currentBaseLayer]);
-    baseTileLayers[layerKey].addTo(map);
-    currentBaseLayer = layerKey;
+function getMarkerColor(props) {
+    if (props.isRumor || props.status === 'FALSE_ALARM') return '#64748b'; // Gray
+    if (props.status === 'ACTIONED') return '#38bdf8'; // Blue
+    if (props.status === 'ADMIN_VERIFIED') return '#10b981'; // Green
+    if (props.severity === 'CRITICAL') return '#ef4444'; // Red
+    return '#f59e0b'; // Amber (AI Checked / Pending)
 }
 
-function recenterMapIndore() {
-    map.flyTo([22.7196, 75.8577], 13, { duration: 0.8 });
+function drawRadiusCircle(lat, lon, radiusKm) {
+    if (radiusCircle) {
+        map.removeLayer(radiusCircle);
+    }
+    radiusCircle = L.circle([lat, lon], {
+        radius: radiusKm * 1000,
+        color: '#38bdf8',
+        weight: 1.5,
+        fillColor: '#0284c7',
+        fillOpacity: 0.12,
+        dashArray: '4, 4'
+    }).addTo(map);
 }
 
-function getPinColor(p) {
-    if (p.isRumor || p.status === 'FALSE_ALARM') return '#65676B'; // Soft gray
-    if (p.status === 'ACTIONED') return '#0866FF'; // Meta Blue
-    if (p.status === 'ADMIN_VERIFIED') return '#31A24C'; // Soft IMD Green
-    if (p.severity === 'CRITICAL') return '#FA383E'; // Soft Red
-    return '#F59E0B'; // Soft Amber
+function updateRadiusVal(val) {
+    document.getElementById('radius-val').innerText = val;
+    if (radiusCircle) {
+        radiusCircle.setRadius(val * 1000);
+    }
 }
 
-function createMapPopover(p) {
+function createPopupContent(p) {
     const isRumor = p.isRumor || p.status === 'FALSE_ALARM';
-    const verifiedChip = p.status === 'ADMIN_VERIFIED' 
-        ? `<span style="background:#E7F7ED; color:#31A24C; font-size:10px; font-weight:700; padding:2px 6px; border-radius:12px;">✅ AI &amp; Admin Verified</span>`
-        : (isRumor 
-            ? `<span style="background:#FDE8E8; color:#FA383E; font-size:10px; font-weight:700; padding:2px 6px; border-radius:12px;">🚫 Purged Rumor</span>` 
-            : `<span style="background:#FEF3C7; color:#D97706; font-size:10px; font-weight:700; padding:2px 6px; border-radius:12px;">⏳ AI Checked</span>`);
+    const rumorPercent = Math.round((p.rumorScore || 0) * 100);
+    const mediaHtml = p.mediaUrl ? `<div style="margin-top:6px;"><img src="${p.mediaUrl}" style="width:100%; border-radius:4px; max-height:120px; object-fit:cover;" /></div>` : '';
+    const phashHtml = p.phash ? `<div style="font-family:monospace; font-size:10px; color:#38bdf8; margin-top:2px;">pHash: ${p.phash}</div>` : '';
+    const dupAlert = p.duplicateFlag ? `
+        <div style="color:#ef4444; font-size:10px; font-weight:bold; margin-top:4px;">
+            ⚠️ RECYCLED DUPLICATE MEDIA DETECTED
+            <button onclick="openForensicsModal(${p.id})" style="background:#dc2626; color:white; border:none; border-radius:3px; padding:2px 6px; font-size:9px; cursor:pointer; margin-left:4px;">Inspect Forensics</button>
+        </div>` : '';
 
     return `
-        <div style="font-family:'Inter',sans-serif; min-width:240px;">
-            <div class="popover-header">
-                <span class="popover-badge">${p.hazardType}</span>
-                ${verifiedChip}
+        <div style="font-family:'Inter', sans-serif; min-width:240px; color:#0f172a;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">
+                <span style="font-size:11px; font-weight:bold; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:3px;">${p.hazardType}</span>
+                <span style="font-size:10px; font-family:monospace; font-weight:bold;">${p.status}</span>
             </div>
-            <div class="popover-title">${escapeHtml(p.title)}</div>
-            <div class="popover-desc">${escapeHtml(p.description)}</div>
-            <div class="popover-meta">
-                <span>📍 ${escapeHtml(p.city || 'Indore')}</span>
-                <span>👤 ${escapeHtml(p.reportedBy || 'Citizen')}</span>
+            <h4 style="margin:6px 0 2px 0; font-size:13px; font-weight:700;">${escapeHtml(p.title)}</h4>
+            <p style="margin:0 0 6px 0; font-size:11px; color:#475569; line-height:1.3;">${escapeHtml(p.description)}</p>
+            ${mediaHtml}
+            ${phashHtml}
+            ${dupAlert}
+            <div style="margin:6px 0; font-size:11px; background:#f8fafc; padding:4px 6px; border-radius:4px;">
+                <div><strong>Rumor Probability:</strong> ${rumorPercent}%</div>
+                <div><strong>Reported By:</strong> ${p.reportedBy || 'Citizen'} (${p.reporterBadge || 'SCOUT'})</div>
             </div>
-            <div style="display:flex; gap:6px; margin-top:8px;">
-                <button onclick="drawEvacuationPath(${p.id})" style="flex:1; background:#0866FF; color:white; border:none; padding:5px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">
-                    ⛺ Evacuation Path
-                </button>
-                ${p.status === 'ADMIN_VERIFIED' ? `
-                    <button onclick="openActionModalForId(${p.id}, '${escapeHtml(p.title)}')" style="flex:1; background:#31A24C; color:white; border:none; padding:5px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">
-                        🚀 Dispatch Force
-                    </button>
-                ` : ''}
+            <div style="display:flex; gap:4px; margin-top:6px;">
+                ${p.status !== 'ADMIN_VERIFIED' && p.status !== 'ACTIONED' && !isRumor ? 
+                    `<button onclick="verifyReportFromMap(${p.id})" style="flex:1; background:#10b981; color:white; border:none; padding:4px; border-radius:4px; font-size:11px; cursor:pointer;">Verify</button>` : ''}
+                ${p.status === 'ADMIN_VERIFIED' ? 
+                    `<button onclick="openActionModalForId(${p.id}, '${escapeHtml(p.title)}')" style="flex:1; background:#0284c7; color:white; border:none; padding:4px; border-radius:4px; font-size:11px; cursor:pointer;">Deploy NDRF</button>` : ''}
+                ${!isRumor ? 
+                    `<button onclick="flagRumorFromMap(${p.id})" style="background:#64748b; color:white; border:none; padding:4px; border-radius:4px; font-size:11px; cursor:pointer;">Flag Rumor</button>` : ''}
             </div>
         </div>
     `;
 }
 
-/* ===================================================================
-   2. Floating Minimalist Filter Chips (Map Section)
-   =================================================================== */
-function setMapFilter(filterType, element) {
-    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-    if (element) element.classList.add('active');
-    currentMapFilter = filterType;
-
-    let filtered = reportsData;
-    if (filterType === 'verified') {
-        filtered = reportsData.filter(f => f.properties.status === 'ADMIN_VERIFIED' || f.properties.status === 'ACTIONED');
-    } else if (filterType) {
-        filtered = reportsData.filter(f => f.properties.hazardType === filterType);
-    }
-
-    geoJsonLayer.clearLayers();
-    geoJsonLayer.addData({ type: 'FeatureCollection', features: filtered });
-}
-
-/* ===================================================================
-   3. Layer Controls: Doppler Radar & Shelters
-   =================================================================== */
-function toggleRadarLayer() {
-    const btn = document.getElementById('btn-radar-toggle');
-    isRadarActive = !isRadarActive;
-
-    if (isRadarActive) {
-        radarLayer = L.tileLayer('https://tilecache.rainviewer.com/v2/radar/nowcast_45min/256/{z}/{x}/{y}/2/1_1.png', {
-            opacity: 0.65,
-            zIndex: 500
-        }).addTo(map);
-        btn.innerText = '🛰️ Doppler Radar: ON';
-        btn.classList.add('btn-soft-primary');
-    } else {
-        if (radarLayer) {
-            map.removeLayer(radarLayer);
-            radarLayer = null;
-        }
-        btn.innerText = '🛰️ Doppler Radar: OFF';
-        btn.classList.remove('btn-soft-primary');
-    }
-}
-
-function toggleSheltersLayer() {
-    const btn = document.getElementById('btn-shelter-toggle');
-    isSheltersActive = !isSheltersActive;
-
-    if (isSheltersActive) {
-        sheltersLayer.addTo(map);
-        btn.innerText = '⛺ Shelters: ON';
-        btn.classList.add('btn-soft-primary');
-    } else {
-        map.removeLayer(sheltersLayer);
-        btn.innerText = '⛺ Shelters: OFF';
-        btn.classList.remove('btn-soft-primary');
-    }
-}
-
-function drawEvacuationPath(reportId) {
-    const match = reportsData.find(f => f.properties.id === reportId);
-    if (!match) return;
-
-    const [lon, lat] = match.geometry.coordinates;
-    const shelter = MOCK_SHELTERS[0]; // Nearest shelter
-
-    if (evacuationRouteLine) {
-        map.removeLayer(evacuationRouteLine);
-    }
-
-    evacuationRouteLine = L.polyline([[lat, lon], [shelter.latitude, shelter.longitude]], {
-        color: '#0866FF',
-        weight: 3,
-        dashArray: '5, 8'
-    }).addTo(map);
-
-    evacuationRouteLine.bindTooltip(`
-        <strong>🚨 Safe Evacuation Path</strong><br>
-        Destination: <strong>${escapeHtml(shelter.name)}</strong> (~1.4 km)
-    `, { sticky: true }).openTooltip();
-
-    map.fitBounds(evacuationRouteLine.getBounds(), { padding: [40, 40] });
-
-    if (voiceEnabled) {
-        speakVoiceAnnouncement(`Evacuation corridor mapped to ${shelter.name}.`);
-    }
-}
-
-/* ===================================================================
-   4. Telemetry & Metrics Data Fetching
-   =================================================================== */
-async function fetchTelemetry() {
+/**
+ * 2. Meteorological Telemetry Fetcher
+ */
+async function fetchTelemetry(lat, lon, city) {
     try {
-        const res = await fetch(`${API_BASE}/api/telemetry/current`);
-        if (!res.ok) throw new Error();
+        const params = new URLSearchParams();
+        if (lat != null) params.append('lat', lat);
+        if (lon != null) params.append('lon', lon);
+        if (city) params.append('city', city);
+
+        const url = params.toString()
+            ? `${API_BASE}/api/telemetry/current?${params.toString()}`
+            : `${API_BASE}/api/telemetry/current`;
+
+        const res = await fetch(url);
+        if (!res.ok) return;
         const t = await res.json();
 
-        document.getElementById('hero-station-label').innerText = 
-            `📍 ${t.city} Station (IMD): ${t.temperature.toFixed(1)}°C • Rain: ${t.precipitationMm.toFixed(1)} mm • Wind: ${t.windSpeedKmh.toFixed(1)} km/h • Risk: ${t.floodRiskLevel.replace(/_/g, ' ')}`;
-
-        const dot = document.getElementById('hero-dot');
-        const badge = document.getElementById('kpi-imdadvisory-badge');
-
-        if (t.floodRiskLevel.includes('CRITICAL')) {
-            dot.className = 'dot-status critical';
-            badge.innerText = 'RED ALERT';
-            badge.style.background = '#FDE8E8';
-            badge.style.color = '#FA383E';
-        } else if (t.floodRiskLevel.includes('HIGH')) {
-            dot.className = 'dot-status warning';
-            badge.innerText = 'ADVISORY';
-            badge.style.background = '#FEF3C7';
-            badge.style.color = '#D97706';
+        document.getElementById('telem-city').innerText = `${t.city} Station (IMD)`;
+        document.getElementById('telem-temp').innerText = `${t.temperature.toFixed(1)}°C`;
+        document.getElementById('telem-rain').innerText = `${t.precipitationMm.toFixed(1)} mm`;
+        document.getElementById('telem-wind').innerText = `${t.windSpeedKmh.toFixed(1)} km/h`;
+        
+        const riskBadge = document.getElementById('telem-risk');
+        riskBadge.innerText = t.floodRiskLevel.replace(/_/g, ' ');
+        if (t.floodRiskLevel.includes('CRITICAL') || t.floodRiskLevel.includes('HIGH')) {
+            riskBadge.className = 'badge-risk';
+            riskBadge.style.borderColor = '#ef4444';
+            riskBadge.style.color = '#fca5a5';
         } else {
-            dot.className = 'dot-status';
-            badge.innerText = 'NORMAL';
-            badge.style.background = '#E7F7ED';
-            badge.style.color = '#31A24C';
+            riskBadge.className = 'badge-risk';
+            riskBadge.style.borderColor = '#10b981';
+            riskBadge.style.color = '#86efac';
         }
     } catch (e) {
-        // Resilient fallback values
-        document.getElementById('hero-station-label').innerText = 
-            `📍 Indore Meteorological Station: 31.5°C • Rain: 0.0 mm • Wind: 23.6 km/h • Risk: NORMAL READINESS`;
+        console.warn('Telemetry fetch warning:', e.message);
     }
 }
 
+/**
+ * Convenience: switch telemetry + map focus to a named Indian city using the
+ * national city directory loaded from the backend (GeoNames-backed).
+ */
+function switchTelemetryToCity(cityName) {
+    const coords = findCityCoords(cityName);
+    if (!coords) {
+        console.warn(`City "${cityName}" not found in national directory`);
+        return false;
+    }
+    fetchTelemetry(coords.lat, coords.lon, cityName);
+    map.flyTo([coords.lat, coords.lon], 11, { duration: 1.2 });
+    return true;
+}
+
+/**
+ * 3. Fetch GeoJSON and Render Map Layers
+ */
 async function fetchReportsGeoJson() {
     try {
-        const res = await fetch(`${API_BASE}/api/reports/geojson`);
-        if (!res.ok) throw new Error();
+        const hazard = document.getElementById('filter-hazard').value;
+        const status = document.getElementById('filter-status').value;
+        const district = document.getElementById('filter-district').value;
+
+        const params = new URLSearchParams();
+        if (hazard) params.append('event', hazard);
+        if (status) params.append('status', status);
+        if (district) params.append('district', district);
+
+        const res = await fetch(`${API_BASE}/api/reports/geojson?${params.toString()}`);
+        if (!res.ok) throw new Error('Failed to fetch GeoJSON data');
+
         const data = await res.json();
-        reportsData = data.features && data.features.length > 0 ? data.features : MOCK_REPORTS;
+        reportsData = data.features || [];
+
+        // Update GeoJSON layer
+        geoJsonLayer.clearLayers();
+        geoJsonLayer.addData(data);
+
+        // Update UI counters and feed list
+        updateStats(reportsData);
+        renderFeedList(reportsData);
+
     } catch (err) {
-        reportsData = MOCK_REPORTS;
+        console.warn('API fetch warning:', err.message);
     }
-
-    geoJsonLayer.clearLayers();
-    geoJsonLayer.addData({ type: 'FeatureCollection', features: reportsData });
-
-    updateHeroKPIs(reportsData);
-    renderIncidentCards(reportsData);
 }
 
 async function fetchSheltersGeoJson() {
     try {
         const res = await fetch(`${API_BASE}/api/shelters/geojson`);
-        if (!res.ok) throw new Error();
+        if (!res.ok) return;
         const data = await res.json();
-        sheltersData = data.features || [];
         sheltersLayer.clearLayers();
         sheltersLayer.addData(data);
-    } catch (e) {
-        // Load mock shelter features
-        const mockGeo = {
-            type: "FeatureCollection",
-            features: MOCK_SHELTERS.map(s => ({
-                type: "Feature",
-                geometry: { type: "Point", coordinates: [s.longitude, s.latitude] },
-                properties: s
-            }))
-        };
-        sheltersLayer.clearLayers();
-        sheltersLayer.addData(mockGeo);
-    }
+    } catch (e) {}
 }
 
-function updateHeroKPIs(features) {
-    document.getElementById('kpi-total-reports').innerText = features.length;
-    const actionedCount = features.filter(f => f.properties.status === 'ACTIONED').length;
-    document.getElementById('kpi-dispatched-count').innerText = Math.max(actionedCount, 3);
+function updateStats(features) {
+    document.getElementById('stat-total').innerText = features.length;
+    document.getElementById('feed-count').innerText = features.length;
+
+    const verified = features.filter(f => f.properties.status === 'ADMIN_VERIFIED').length;
+    const actioned = features.filter(f => f.properties.status === 'ACTIONED').length;
+    const rumors = features.filter(f => f.properties.isRumor || f.properties.status === 'FALSE_ALARM').length;
+
+    document.getElementById('stat-verified').innerText = verified;
+    document.getElementById('stat-actioned').innerText = actioned;
+    document.getElementById('stat-rumor').innerText = rumors;
 }
 
-/* ===================================================================
-   5. Section 3: De-cluttered Incident Cards Stream Rendering
-   =================================================================== */
-function renderIncidentCards(features) {
-    const container = document.getElementById('incident-cards-container');
-    container.innerHTML = '';
+function renderFeedList(features) {
+    const list = document.getElementById('incident-feed-list');
+    list.innerHTML = '';
 
     if (features.length === 0) {
-        container.innerHTML = `
-            <div style="grid-column: 1 / -1; text-align:center; padding:48px 20px; background:var(--surface-card); border-radius:var(--radius-lg); border:1px solid var(--border-subtle); color:var(--text-secondary);">
-                No reports matching your search criteria.
-            </div>
-        `;
+        list.innerHTML = '<div style="color:#64748b; font-size:0.8rem; text-align:center; padding:20px;">No incidents matching current criteria</div>';
         return;
     }
 
     features.forEach(f => {
         const p = f.properties;
         const card = document.createElement('div');
-        card.className = 'incident-item-card';
+        card.className = 'incident-card';
 
-        const isVerified = p.status === 'ADMIN_VERIFIED';
-        const isActioned = p.status === 'ACTIONED';
         const isRumor = p.isRumor || p.status === 'FALSE_ALARM';
-        const statusChipClass = isVerified ? 'chip-verified' : (isActioned ? 'chip-actioned' : (isRumor ? 'chip-rumor' : 'chip-pending'));
-
-        // Media preview
-        let mediaHtml = '';
-        if (p.mediaUrl) {
-            const fullUrl = p.mediaUrl.startsWith('http') ? p.mediaUrl : `${API_BASE}${p.mediaUrl}`;
-            mediaHtml = `
-                <div class="incident-thumb-wrapper">
-                    <img src="${fullUrl}" class="incident-thumb-img" onerror="this.src='https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=600&q=80'" alt="Evidence Photo" />
-                </div>
-            `;
-        }
-
-        // Duplicate pHash badge
-        const dupBadge = p.duplicateFlag ? `
-            <div style="background:var(--badge-critical-bg); color:var(--badge-critical); border:1px solid var(--badge-critical-border); padding:4px 8px; border-radius:6px; font-size:11px; font-weight:700; display:flex; justify-content:space-between; align-items:center;">
-                <span>⚠️ Recycled Old Image (pHash Match)</span>
-                <button class="btn btn-sm btn-soft-danger" onclick="openForensicsModal(${p.id})">Inspect</button>
-            </div>
-        ` : '';
+        const rumorScore = Math.round((p.rumorScore || 0) * 100);
 
         card.innerHTML = `
-            <div>
-                <div class="card-top-row">
-                    <div class="reporter-trust-badge">
-                        <span>🛡️</span>
-                        <span>${escapeHtml(p.reportedBy || 'Citizen')} &bull; ${Math.round(p.reporterTrustScore || 85)} pts</span>
-                    </div>
-                    <span class="card-status-chip ${statusChipClass}">${p.status.replace(/_/g, ' ')}</span>
-                </div>
-
-                <div class="card-content-area" style="margin-top:12px;">
-                    <h3 class="incident-card-headline">${escapeHtml(p.title)}</h3>
-                    <p class="incident-card-narrative">${escapeHtml(p.description)}</p>
-                    ${mediaHtml}
-                    ${dupBadge}
-
-                    <!-- AI Verification Signals Strip -->
-                    <div class="ai-signal-strip">
-                        <span class="ai-signal-tag">
-                            <span>🔍 pHash:</span> <strong>${p.duplicateFlag ? 'Duplicate Found' : 'Unique'}</strong>
-                        </span>
-                        <span class="ai-signal-tag">
-                            <span>🤖 NLP Rumor:</span> <strong style="color:${(p.rumorScore || 0) > 0.5 ? 'var(--badge-critical)' : 'var(--badge-verified)'}">${Math.round((p.rumorScore || 0.05) * 100)}%</strong>
-                        </span>
-                        <span class="ai-signal-tag">
-                            <span>📍 Loc:</span> <strong>${escapeHtml(p.city || 'Indore')}</strong>
-                        </span>
-                    </div>
-                </div>
+            <div class="card-top">
+                <span class="badge-hazard">${p.hazardType}</span>
+                <span class="badge-status status-${p.status}">${p.status}</span>
             </div>
-
-            <div class="card-actions-row">
-                ${!isVerified && !isActioned && !isRumor ? `
-                    <button class="btn btn-sm btn-soft-success" onclick="verifyReportFromCard(${p.id})">
-                        ✓ Verify
-                    </button>
-                ` : ''}
-                ${isVerified ? `
-                    <button class="btn btn-sm btn-primary" onclick="openActionModalForId(${p.id}, '${escapeHtml(p.title)}')">
-                        🚀 Dispatch Force
-                    </button>
-                ` : ''}
-                <button class="btn btn-sm btn-secondary" onclick="drawEvacuationPath(${p.id})">
-                    ⛺ Route Shelter
-                </button>
-                ${!isRumor ? `
-                    <button class="btn btn-sm btn-soft-danger" onclick="flagRumorFromCard(${p.id})">
-                        Flag Fake
-                    </button>
-                ` : ''}
+            <div class="card-title">${escapeHtml(p.title)}</div>
+            <div class="card-desc">${escapeHtml(p.description)}</div>
+            <div class="card-metrics">
+                <span class="metric-loc">📍 ${escapeHtml(p.city || 'Indore')}</span>
+                <span class="metric-rumor ${rumorScore > 50 ? 'high-rumor' : ''}">🤖 Rumor Score: ${rumorScore}%</span>
+            </div>
+            ${p.duplicateFlag ? `
+                <div style="color:#ef4444; font-size:11px; font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
+                    <span>⚠️ Recycled Duplicate Media Flagged</span>
+                    <button class="btn btn-danger btn-sm" style="padding:2px 6px; font-size:10px;" onclick="openForensicsModal(${p.id})">Forensics</button>
+                </div>` : ''}
+            <div class="card-actions">
+                ${p.status !== 'ADMIN_VERIFIED' && p.status !== 'ACTIONED' && !isRumor ? 
+                    `<button class="btn btn-primary btn-sm" onclick="verifyReportFromMap(${p.id})">Verify Ground Truth</button>` : ''}
+                ${p.status === 'ADMIN_VERIFIED' ? 
+                    `<button class="btn btn-danger btn-sm" onclick="openActionModalForId(${p.id}, '${escapeHtml(p.title)}')">Deploy Relief Team</button>` : ''}
+                <button class="btn btn-secondary btn-sm" onclick="focusOnMarker(${p.id})">Locate</button>
             </div>
         `;
-        container.appendChild(card);
+        list.appendChild(card);
     });
 }
 
-function applyFeedFilters() {
-    const hazard = document.getElementById('feed-hazard-filter').value;
-    const status = document.getElementById('feed-status-filter').value;
-    const query = document.getElementById('feed-search-box').value.toLowerCase().trim();
-
-    let filtered = reportsData;
-
-    if (hazard) {
-        filtered = filtered.filter(f => f.properties.hazardType === hazard);
-    }
-    if (status) {
-        filtered = filtered.filter(f => f.properties.status === status);
-    }
-    if (query) {
-        filtered = filtered.filter(f => {
-            const title = (f.properties.title || '').toLowerCase();
-            const desc = (f.properties.description || '').toLowerCase();
-            return title.includes(query) || desc.includes(query);
-        });
-    }
-
-    renderIncidentCards(filtered);
-}
-
-function resetFeedFilters() {
-    document.getElementById('feed-hazard-filter').value = '';
-    document.getElementById('feed-status-filter').value = '';
-    document.getElementById('feed-search-box').value = '';
-    renderIncidentCards(reportsData);
-}
-
-/* ===================================================================
-   6. Section 4: Citizen Report Submission & Lifecycle Tracker
-   =================================================================== */
-function selectHazardChip(hazardVal, buttonEl) {
-    document.querySelectorAll('.hazard-btn-chip').forEach(b => b.classList.remove('selected'));
-    buttonEl.classList.add('selected');
-    document.getElementById('form-hazard-val').value = hazardVal;
-}
-
-function triggerClientGeolocation() {
-    if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition((pos) => {
-            document.getElementById('form-lat').value = pos.coords.latitude.toFixed(5);
-            document.getElementById('form-lon').value = pos.coords.longitude.toFixed(5);
-            map.flyTo([pos.coords.latitude, pos.coords.longitude], 14, { duration: 0.8 });
-        }, () => {
-            document.getElementById('form-lat').value = '22.7196';
-            document.getElementById('form-lon').value = '75.8577';
-            recenterMapIndore();
-        });
+function focusOnMarker(reportId) {
+    const match = reportsData.find(f => f.properties.id === reportId);
+    if (match) {
+        const [lon, lat] = match.geometry.coordinates;
+        map.flyTo([lat, lon], 14, { duration: 1.2 });
+        drawRadiusCircle(lat, lon, 5);
     }
 }
 
-function previewImageDropzone(input) {
-    if (input.files && input.files[0]) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            document.getElementById('dropzone-preview-img').src = e.target.result;
-            document.getElementById('dropzone-preview-box').classList.remove('hidden');
+/**
+ * 4. Layer Controls: Doppler Radar & Shelters
+ */
+function toggleRadarLayer() {
+    const btn = document.getElementById('btn-radar');
+    isRadarActive = !isRadarActive;
 
-            const mockHash = (Math.random().toString(16) + '0000000000000000').substring(2, 18);
-            document.getElementById('dropzone-phash-tag').innerText = `Computed pHash: ${mockHash}`;
-        };
-        reader.readAsDataURL(input.files[0]);
-    }
-}
-
-function findNearestShelterCitizen() {
-    const box = document.getElementById('nearest-shelter-box');
-    const shelter = MOCK_SHELTERS[0];
-    box.innerHTML = `
-        <strong>⛺ Nearest Shelter:</strong> ${escapeHtml(shelter.name)} (1.4 km away)<br>
-        Address: ${escapeHtml(shelter.address)} &bull; Available: <strong>${shelter.availableSlots} / ${shelter.capacity}</strong> slots
-    `;
-    box.classList.remove('hidden');
-}
-
-async function submitCitizenReport(e) {
-    e.preventDefault();
-    const btn = document.getElementById('btn-submit-report');
-    btn.disabled = true;
-    btn.innerText = 'Submitting to Kafka Pipeline...';
-
-    const trackingReceipt = "REP-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-
-    try {
-        const formData = new FormData();
-        formData.append('username', 'citizen_arun');
-        formData.append('title', document.getElementById('form-title').value);
-        formData.append('hazardType', document.getElementById('form-hazard-val').value);
-        formData.append('severity', 'HIGH');
-        formData.append('latitude', document.getElementById('form-lat').value);
-        formData.append('longitude', document.getElementById('form-lon').value);
-        formData.append('city', 'Indore');
-        formData.append('district', 'Indore');
-        formData.append('description', document.getElementById('form-desc').value);
-
-        const fileInput = document.getElementById('form-file');
-        if (fileInput.files.length > 0) {
-            formData.append('mediaFile', fileInput.files[0]);
-        }
-
-        await fetch(`${API_BASE}/api/reports/submit`, {
-            method: 'POST',
-            body: formData
-        });
-
-        alert(`✅ Report Successfully Ingested into Streaming Queue!\n\nTracking Receipt: ${trackingReceipt}\n\nUndergoing AI rumor evaluation & pHash check.`);
-        document.getElementById('citizen-form').reset();
-        document.getElementById('dropzone-preview-box').classList.add('hidden');
-        document.getElementById('nearest-shelter-box').classList.add('hidden');
-
-        quickTrackInput(trackingReceipt);
-        fetchReportsGeoJson();
-
-    } catch (err) {
-        alert(`✅ Report Ingested into Local Queue!\nTracking Receipt: ${trackingReceipt}`);
-        quickTrackInput(trackingReceipt);
-    } finally {
-        btn.disabled = false;
-        btn.innerText = '🚀 Submit Verified Ground Report (Kafka Decoupled)';
-    }
-}
-
-/* Report Lifecycle Stepper */
-function quickTrackInput(id) {
-    document.getElementById('track-input-id').value = id;
-    trackReportById();
-}
-
-async function trackReportById() {
-    const id = document.getElementById('track-input-id').value.trim();
-    if (!id) return;
-
-    try {
-        const res = await fetch(`${API_BASE}/api/reports/tracking/${id}`);
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        updateStepperUI(data.report, data.history);
-    } catch (e) {
-        // Fallback to mock report state for seamless demo
-        const match = MOCK_REPORTS.find(r => r.properties.trackingId === id) || MOCK_REPORTS[0];
-        updateStepperUI(match.properties, [
-            { fromState: "SUBMITTED", toState: "AI_CHECKED", performedBy: "AI_NLP_ENGINE", comments: "NLP RumorScore=0.04, Perceptual Hash=unique" },
-            { fromState: "AI_CHECKED", toState: "ADMIN_VERIFIED", performedBy: "admin_ndrf", comments: "Ground truth confirmed via field officer." }
-        ]);
-    }
-}
-
-function updateStepperUI(report, history) {
-    document.getElementById('track-rep-title').innerText = report.title;
-    document.getElementById('track-rep-status').innerText = report.status;
-    document.getElementById('track-rep-desc').innerText = report.description;
-
-    const steps = ['SUBMITTED', 'AI_CHECKED', 'ADMIN_VERIFIED', 'ACTIONED'];
-    const idx = steps.indexOf(report.status);
-    const progressWidth = idx === -1 ? 0 : Math.round((idx / (steps.length - 1)) * 100);
-
-    const fillEl = document.getElementById('stepper-fill');
-    if (fillEl) fillEl.style.width = `${progressWidth}%`;
-
-    const nodes = [
-        document.getElementById('step-node-submitted'),
-        document.getElementById('step-node-ai'),
-        document.getElementById('step-node-admin'),
-        document.getElementById('step-node-action')
-    ];
-
-    nodes.forEach((n, i) => {
-        if (!n) return;
-        n.className = 'step-node';
-        if (i < idx) n.classList.add('completed');
-        else if (i === idx) n.classList.add('current');
-    });
-
-    const logsContainer = document.getElementById('tracker-audit-logs');
-    logsContainer.innerHTML = '';
-    (history || []).forEach(h => {
-        const div = document.createElement('div');
-        div.style.cssText = 'font-size:0.78rem; padding:8px 12px; background:var(--surface-subtle); border-radius:var(--radius-sm); border-left:3px solid var(--badge-verified);';
-        div.innerHTML = `
-            <strong>${h.fromState} ➔ ${h.toState}</strong> by <em>${escapeHtml(h.performedBy)}</em>
-            <div style="color:var(--text-muted); font-size:0.72rem; margin-top:2px;">${escapeHtml(h.comments || '')}</div>
-        `;
-        logsContainer.appendChild(div);
-    });
-}
-
-/* ===================================================================
-   7. Section 5: Civic Trust & Gamification
-   =================================================================== */
-async function fetchLeaderboard() {
-    let list = MOCK_LEADERBOARD;
-    try {
-        const res = await fetch(`${API_BASE}/api/reputation/leaderboard`);
-        if (res.ok) {
-            const data = await res.json();
-            if (data && data.length > 0) list = data;
-        }
-    } catch (e) {}
-
-    const tbody = document.getElementById('leaderboard-table-body');
-    tbody.innerHTML = '';
-
-    list.forEach((u, i) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="rank-badge">#${i + 1}</td>
-            <td><strong>${escapeHtml(u.fullName || u.username)}</strong></td>
-            <td><span class="profile-badge-pill">${u.badgeTier ? u.badgeTier.replace(/_/g, ' ') : 'ACTIVE SCOUT'}</span></td>
-            <td><strong style="color:var(--badge-verified);">${Math.round(u.score)} pts</strong></td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-
-/* ===================================================================
-   8. Role Switcher & Theme Toggle
-   =================================================================== */
-function switchRoleView(role) {
-    currentRoleView = role;
-    document.querySelectorAll('.role-pill-btn').forEach(b => b.classList.remove('active'));
-
-    if (role === 'citizen') {
-        document.getElementById('pill-citizen-view').classList.add('active');
-        document.getElementById('section-track-report').scrollIntoView({ behavior: 'smooth' });
+    if (isRadarActive) {
+        // RainViewer Live Weather Radar Tile Layer
+        radarLayer = L.tileLayer('https://tilecache.rainviewer.com/v2/radar/nowcast_45min/256/{z}/{x}/{y}/2/1_1.png', {
+            opacity: 0.65,
+            zIndex: 500
+        }).addTo(map);
+        btn.innerText = '🛰️ Doppler Radar: ON';
+        btn.classList.add('active');
     } else {
-        document.getElementById('pill-ops-view').classList.add('active');
-        document.getElementById('section-incidents').scrollIntoView({ behavior: 'smooth' });
+        if (radarLayer) {
+            map.removeLayer(radarLayer);
+            radarLayer = null;
+        }
+        btn.innerText = '🛰️ Doppler Radar: OFF';
+        btn.classList.remove('active');
     }
 }
 
-function toggleDarkMode() {
-    document.body.classList.toggle('dark-mode');
-    const isDark = document.body.classList.contains('dark-mode');
-    localStorage.setItem('suraksha_theme', isDark ? 'dark' : 'light');
+function toggleSheltersLayer() {
+    const btn = document.getElementById('btn-shelters');
+    isSheltersActive = !isSheltersActive;
+
+    if (isSheltersActive) {
+        sheltersLayer.addTo(map);
+        btn.innerText = '⛺ Safe Shelters: ON';
+        btn.classList.add('active');
+    } else {
+        map.removeLayer(sheltersLayer);
+        btn.innerText = '⛺ Safe Shelters: OFF';
+        btn.classList.remove('active');
+    }
 }
 
-function toggleAudio() {
-    audioEnabled = !audioEnabled;
-    voiceEnabled = audioEnabled;
-    const btn = document.getElementById('btn-sound-toggle');
-    btn.innerText = audioEnabled ? '🔔' : '🔕';
+function toggleSachetLayer() {
+    const btn = document.getElementById('btn-sachet');
+    isSachetActive = !isSachetActive;
+
+    if (isSachetActive) {
+        if (!map.hasLayer(sachetLayer)) sachetLayer.addTo(map);
+        btn.innerText = '📡 SACHET Alerts: ON';
+        btn.classList.add('sachet-active');
+        renderSachetMapMarkers();
+    } else {
+        if (map.hasLayer(sachetLayer)) map.removeLayer(sachetLayer);
+        btn.innerText = '📡 SACHET Alerts: OFF';
+        btn.classList.remove('sachet-active');
+    }
 }
 
-function speakVoiceAnnouncement(text) {
-    if (!voiceEnabled || !('speechSynthesis' in window)) return;
-    try {
-        const u = new SpeechSynthesisUtterance(text);
-        u.rate = 1.05;
-        window.speechSynthesis.speak(u);
-    } catch (e) {}
-}
-
-/* ===================================================================
-   9. Modals & Presets Simulation Suite (Hackathon Presentation)
-   =================================================================== */
-function openSimulationModal() {
-    document.getElementById('simulation-modal').classList.remove('hidden');
-}
-function closeSimulationModal() {
-    document.getElementById('simulation-modal').classList.add('hidden');
-}
-
-function openActionModalForId(id, title) {
-    activeReportForAction = id;
-    document.getElementById('action-modal-title').innerText = title;
-    document.getElementById('action-modal').classList.remove('hidden');
-}
-function closeActionModal() {
-    document.getElementById('action-modal').classList.add('hidden');
-}
-
-async function confirmDispatchAction() {
-    if (!activeReportForAction) return;
-    const team = document.getElementById('action-team-select').value;
-    const directives = document.getElementById('action-directives').value;
-
-    try {
-        await fetch(`${API_BASE}/api/admin/reports/${activeReportForAction}/action`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ teamName: team, instructions: directives })
-        });
-    } catch (e) {}
-
-    closeActionModal();
-    alert(`🚀 Emergency Force Deployed!\n${team} mobilized with directives.`);
-    fetchReportsGeoJson();
-    if (voiceEnabled) speakVoiceAnnouncement(`${team} mobilized for ground relief.`);
-}
-
-async function verifyReportFromCard(id) {
-    if (!confirm('Verify ground truth for this report?')) return;
-    try {
-        await fetch(`${API_BASE}/api/admin/reports/${id}/verify`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ adminUser: 'admin_ndrf', comments: 'Confirmed by field ground inspector.' })
-        });
-    } catch (e) {}
-
-    fetchReportsGeoJson();
-    if (voiceEnabled) speakVoiceAnnouncement('Report ground truth verified.');
-}
-
-async function flagRumorFromCard(id) {
-    const reason = prompt('Reason for flagging as false alarm:', 'Contradicted by station telemetry.');
-    if (!reason) return;
-    try {
-        await fetch(`${API_BASE}/api/admin/reports/${id}/false-alarm`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ adminUser: 'admin_ndrf', reason: reason })
-        });
-    } catch (e) {}
-
-    fetchReportsGeoJson();
-}
-
+/**
+ * 5. Media Forensics Modal
+ */
 async function openForensicsModal(reportId) {
     const modal = document.getElementById('forensics-modal');
-    const body = document.getElementById('forensics-modal-body');
-    body.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">Comparing bitwise perceptual hashes...</div>';
+    const content = document.getElementById('forensics-content');
+    content.innerHTML = '<div style="color:#94a3b8; font-size:0.8rem; text-align:center;">Analyzing bitwise perceptual hashes...</div>';
     modal.classList.remove('hidden');
 
     try {
         const res = await fetch(`${API_BASE}/api/admin/media-forensics/${reportId}`);
-        if (!res.ok) throw new Error();
+        if (!res.ok) throw new Error('Could not retrieve forensics report');
         const f = await res.json();
 
-        body.innerHTML = `
-            <div style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:12px;">
-                Incident Target: <strong>${escapeHtml(f.targetTitle)}</strong> (${f.targetTrackingId})
+        content.innerHTML = `
+            <div style="font-size:0.82rem; color:#cbd5e1; margin-bottom:8px;">
+                Incident: <strong>${escapeHtml(f.targetTitle)}</strong> (${f.targetTrackingId})
             </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-                <div style="background:var(--surface-subtle); padding:12px; border-radius:8px;">
-                    <div style="font-size:11px; font-weight:700; color:var(--brand-primary); margin-bottom:6px;">NEW UPLOAD</div>
-                    <img src="${f.targetMediaUrl ? (f.targetMediaUrl.startsWith('http') ? f.targetMediaUrl : `${API_BASE}${f.targetMediaUrl}`) : 'https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=400&q=80'}" style="width:100%; height:130px; object-fit:cover; border-radius:6px;" alt="Target" />
-                    <div style="font-size:10px; font-family:'JetBrains Mono',monospace; color:var(--text-muted); margin-top:6px;">
-                        pHash: ${f.targetPHash || 'cccc3333ff333373'}
+            <div class="forensics-grid">
+                <div class="forensics-card">
+                    <strong style="font-size:11px; color:#38bdf8;">NEW CITIZEN UPLOAD</strong>
+                    <img src="${f.targetMediaUrl || '/uploads/placeholder.jpg'}" alt="Target Upload" />
+                    <div class="forensics-meta">
+                        <div>Tracking: <strong>${f.targetTrackingId}</strong></div>
+                        <div style="margin-top:4px;">pHash Fingerprint:</div>
+                        <div class="phash-box">${f.targetPHash || 'N/A'}</div>
                     </div>
                 </div>
-                <div style="background:var(--surface-subtle); padding:12px; border-radius:8px;">
-                    <div style="font-size:11px; font-weight:700; color:var(--badge-pending); margin-bottom:6px;">MATCHED DATABASE ASSET</div>
-                    <img src="${f.originalMediaUrl ? (f.originalMediaUrl.startsWith('http') ? f.originalMediaUrl : `${API_BASE}${f.originalMediaUrl}`) : 'https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=400&q=80'}" style="width:100%; height:130px; object-fit:cover; border-radius:6px;" alt="Original" />
-                    <div style="font-size:10px; font-family:'JetBrains Mono',monospace; color:var(--text-muted); margin-top:6px;">
-                        pHash: ${f.originalPHash || 'cccc3333ff333373'}
+                <div class="forensics-card">
+                    <strong style="font-size:11px; color:#f59e0b;">MATCHED EXISTING MEDIA</strong>
+                    <img src="${f.originalMediaUrl || '/uploads/placeholder.jpg'}" alt="Original Media" />
+                    <div class="forensics-meta">
+                        <div>Original Report: <strong>${escapeHtml(f.originalTitle || 'N/A')}</strong></div>
+                        <div>Original ID: <strong>${f.originalTrackingId || 'N/A'}</strong></div>
+                        <div style="margin-top:4px;">pHash Fingerprint:</div>
+                        <div class="phash-box">${f.originalPHash || 'N/A'}</div>
                     </div>
                 </div>
             </div>
-            <div style="margin-top:14px; background:var(--badge-critical-bg); border:1px solid var(--badge-critical-border); border-radius:8px; padding:12px; text-align:center;">
-                <strong style="color:var(--badge-critical); font-size:0.9rem;">⚠️ BITWISE HAMMING DISTANCE: ${f.hammingDistance} / 64 BITS (${f.similarityPercentage}% VISUAL SIMILARITY)</strong>
-                <div style="font-size:0.78rem; color:var(--text-secondary); margin-top:2px;">${f.forensicVerdict}</div>
+
+            <div class="match-verdict-box">
+                <div class="match-verdict-title">⚠️ HAMMING DISTANCE: ${f.hammingDistance} / 64 BITS (${f.similarityPercentage}% VISUAL MATCH)</div>
+                <div class="match-verdict-sub">${f.forensicVerdict}</div>
             </div>
         `;
-    } catch (e) {
-        body.innerHTML = `
-            <div style="background:var(--badge-critical-bg); border:1px solid var(--badge-critical-border); border-radius:8px; padding:16px; text-align:center;">
-                <strong style="color:var(--badge-critical); font-size:0.92rem;">⚠️ RECYCLED OLD PHOTO MATCH CONFIRMED</strong>
-                <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:4px;">
-                    Bitwise Hamming Distance = 0 bits (100% visual match). Image matches archived flood report from 2021.
-                </p>
-            </div>
-        `;
+
+    } catch (err) {
+        content.innerHTML = `<div style="color:#f87171; font-size:0.8rem;">${err.message}</div>`;
     }
 }
 
@@ -955,76 +741,57 @@ function closeForensicsModal() {
     document.getElementById('forensics-modal').classList.add('hidden');
 }
 
-async function simulatePresetPayload(type) {
-    closeSimulationModal();
-    if (type === 'valid_flood') {
-        try {
-            await fetch(`${API_BASE}/api/reports/social-stream`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    platform: 'TWITTER_IMD',
-                    author: 'user_rain_watch',
-                    content: 'Heavy waterlogging near Geeta Bhawan square after 40mm shower. #IMD #Indore',
-                    latitude: 22.7180,
-                    longitude: 75.8820,
-                    city: 'Indore',
-                    district: 'Indore'
-                })
-            });
-        } catch (e) {}
-        alert('🌊 Ingested legitimate #IMD tweet into Kafka stream!');
-        fetchReportsGeoJson();
-    } else if (type === 'panic_rumor') {
-        try {
-            await fetch(`${API_BASE}/api/reports/social-stream`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    platform: 'TWITTER_IMD',
-                    author: 'viral_panic_99',
-                    content: 'BILAWALI DAM COLLAPSED COMPLETELY! THOUSANDS DROWNED RUN FOR LIVES! #IMD',
-                    latitude: 22.6738,
-                    longitude: 75.8652,
-                    city: 'Indore',
-                    district: 'Indore'
-                })
-            });
-        } catch (e) {}
-        alert('🚫 Panic Rumor Ingested!\nAI Model evaluated RumorScore=0.98 and automatically purged to FALSE_ALARM.');
-        fetchReportsGeoJson();
-    } else if (type === 'cloudburst') {
-        try {
-            await fetch(`${API_BASE}/api/reports/social-stream`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    platform: 'NEWS_WIRE',
-                    author: 'deoc_station',
-                    content: 'CRITICAL: Intense cloudburst of 115mm recorded in central Indore near Rajwada #IMD',
-                    latitude: 22.7196,
-                    longitude: 75.8577,
-                    city: 'Indore',
-                    district: 'Indore'
-                })
-            });
-        } catch (e) {}
-        alert('⚡ Critical Cloudburst Report Ingested into Queue!');
-        fetchReportsGeoJson();
-        if (voiceEnabled) speakVoiceAnnouncement('Warning: Critical cloudburst emergency alert ingested.');
-    } else {
-        alert('📸 Recycled photo duplicate ingested. pHash engine detected visual match.');
-        fetchReportsGeoJson();
+/**
+ * 6. Find Nearest Shelter for Citizen
+ */
+async function findNearestShelterForCitizen() {
+    const lat = document.getElementById('rep-lat').value;
+    const lon = document.getElementById('rep-lon').value;
+    const infoBox = document.getElementById('nearest-shelter-info');
+
+    try {
+        infoBox.innerHTML = 'Locating high-ground safe shelters nearby...';
+        infoBox.classList.remove('hidden');
+
+        const res = await fetch(`${API_BASE}/api/shelters/nearest?lat=${lat}&lon=${lon}`);
+        if (!res.ok) throw new Error('Unable to find shelters');
+        const list = await res.json();
+
+        if (list.length === 0) {
+            infoBox.innerHTML = 'No operational shelters found nearby.';
+            return;
+        }
+
+        const s = list[0];
+        infoBox.innerHTML = `
+            <div><strong>Nearest Shelter:</strong> ${escapeHtml(s.name)} (<strong>${s.distanceKm} km</strong> away)</div>
+            <div>Address: ${escapeHtml(s.address)} | Phone: ${escapeHtml(s.contactPhone)}</div>
+            <div style="margin-top:4px;">
+                <button type="button" onclick="focusOnShelter(${s.latitude}, ${s.longitude})" style="background:#10b981; color:white; border:none; padding:2px 8px; border-radius:3px; font-size:10px; cursor:pointer;">
+                    📍 View on Map
+                </button>
+            </div>
+        `;
+    } catch (e) {
+        infoBox.innerHTML = `<span style="color:#fca5a5;">${e.message}</span>`;
     }
 }
 
-function openSitrep() {
-    window.open(`${API_BASE}/api/admin/sitrep/html?district=Indore`, '_blank');
+function focusOnShelter(lat, lon) {
+    map.flyTo([lat, lon], 15, { duration: 1 });
 }
 
-/* ===================================================================
-   10. Real-Time WebSocket & SSE Integration
-   =================================================================== */
+/**
+ * 7. Open Printable Situation Report (SITREP)
+ */
+function openSitrep() {
+    const city = currentTelemetryCity || 'Indore';
+    window.open(`${API_BASE}/api/admin/sitrep/html?district=${encodeURIComponent(city)}`, '_blank');
+}
+
+/**
+ * 8. Real-Time Stream Integration (STOMP + SSE Fallback)
+ */
 function connectRealtimeStreams() {
     try {
         const socket = new SockJS(`${API_BASE}/ws-weather`);
@@ -1032,13 +799,17 @@ function connectRealtimeStreams() {
         stompClient.debug = null;
 
         stompClient.connect({}, () => {
+            console.log('Connected to STOMP WebSocket broker');
+            setConnectionStatus(true);
+
             stompClient.subscribe('/topic/reports', (msg) => {
-                fetchReportsGeoJson();
-                fetchLeaderboard();
+                const reportUpdate = JSON.parse(msg.body);
+                handleLiveReportUpdate(reportUpdate);
             });
+
             stompClient.subscribe('/topic/alerts', (msg) => {
-                const alertData = JSON.parse(msg.body);
-                alert(`🚨 EMERGENCY BROADCAST: ${alertData.title}\n\n${alertData.message}`);
+                const alert = JSON.parse(msg.body);
+                handleLiveEmergencyAlert(alert);
             });
         }, () => {
             connectSseFallback();
@@ -1051,18 +822,381 @@ function connectRealtimeStreams() {
 function connectSseFallback() {
     try {
         const sse = new EventSource(`${API_BASE}/api/stream/reports`);
-        sse.addEventListener('REPORT_UPDATE', () => {
-            fetchReportsGeoJson();
-            fetchLeaderboard();
+        sse.addEventListener('REPORT_UPDATE', (e) => {
+            const data = JSON.parse(e.data);
+            handleLiveReportUpdate(data);
         });
         sse.addEventListener('ALERT', (e) => {
             const data = JSON.parse(e.data);
-            alert(`🚨 EMERGENCY BROADCAST: ${data.title}\n\n${data.message}`);
+            handleLiveEmergencyAlert(data);
         });
-    } catch (err) {}
+        sse.onopen = () => setConnectionStatus(true);
+        sse.onerror = () => setConnectionStatus(false);
+    } catch (err) {
+        setConnectionStatus(false);
+    }
 }
 
-/* Utility Helpers */
+function setConnectionStatus(connected) {
+    const dot = document.getElementById('conn-indicator');
+    const text = document.getElementById('conn-text');
+    if (connected) {
+        dot.className = 'dot dot-connected';
+        text.innerText = 'LIVE STREAM ACTIVE';
+        text.style.color = '#10b981';
+    } else {
+        dot.className = 'dot';
+        dot.style.background = '#f59e0b';
+        text.innerText = 'STREAM RECONNECTING';
+        text.style.color = '#f59e0b';
+    }
+}
+
+function handleLiveReportUpdate(report) {
+    if (audioEnabled) playChime();
+    document.getElementById('live-ticker').innerText = `LIVE: Report ${report.trackingId} transitioned to ${report.status} (${report.hazardType})`;
+
+    fetchReportsGeoJson();
+    fetchLeaderboard();
+}
+
+function handleLiveEmergencyAlert(alert) {
+    if (audioEnabled) playAlarm();
+    alert(`🚨 EMERGENCY BROADCAST: ${alert.title}\n\n${alert.message}`);
+}
+
+/**
+ * 9. Citizen Ground Report Submission (Kafka Decoupled)
+ */
+async function submitCitizenReport(event) {
+    event.preventDefault();
+    const btn = document.getElementById('btn-submit-report');
+    btn.disabled = true;
+    btn.innerText = 'Ingesting to Kafka Buffer...';
+
+    try {
+        const formData = new FormData();
+        formData.append('username', document.getElementById('rep-username').value);
+        formData.append('title', document.getElementById('rep-title').value);
+        formData.append('hazardType', document.getElementById('rep-hazard').value);
+        formData.append('severity', document.getElementById('rep-severity').value);
+        formData.append('latitude', document.getElementById('rep-lat').value);
+        formData.append('longitude', document.getElementById('rep-lon').value);
+        formData.append('city', document.getElementById('rep-city').value);
+        formData.append('district', document.getElementById('rep-district').value);
+        formData.append('description', document.getElementById('rep-description').value);
+
+        const fileInput = document.getElementById('rep-file');
+        if (fileInput.files.length > 0) {
+            formData.append('mediaFile', fileInput.files[0]);
+        }
+
+        const res = await fetch(`${API_BASE}/api/reports/submit`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!res.ok) throw new Error('Failed to submit report');
+        const data = await res.json();
+
+        alert(`✅ Report Ingested Successfully!\n\nTracking Receipt: ${data.trackingId}\n\nYour ground report is buffered in Kafka and currently undergoing AI rumor evaluation.`);
+
+        document.getElementById('citizen-report-form').reset();
+        document.getElementById('image-preview-container').classList.add('hidden');
+        document.getElementById('nearest-shelter-info').classList.add('hidden');
+
+        document.getElementById('track-id-input').value = data.trackingId;
+        switchTab('tracking-tab');
+        trackReport();
+
+    } catch (err) {
+        alert('Submission error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = '🚀 Submit Verified Report (Kafka Decoupled)';
+    }
+}
+
+function previewImage(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const preview = document.getElementById('image-preview');
+            preview.src = e.target.result;
+            document.getElementById('image-preview-container').classList.remove('hidden');
+
+            const mockHash = (Math.random().toString(16) + '0000000000000000').substring(2, 18);
+            document.getElementById('phash-preview-label').innerText = `pHash Fingerprint: ${mockHash}`;
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+/**
+ * 10. Citizen Tracking Ledger
+ */
+async function trackReport() {
+    const trackingId = document.getElementById('track-id-input').value.trim();
+    if (!trackingId) return;
+
+    const resultBox = document.getElementById('tracking-result');
+    resultBox.innerHTML = '<div style="color:#94a3b8; font-size:0.8rem;">Retrieving ledger entries...</div>';
+    resultBox.classList.remove('hidden');
+
+    try {
+        const res = await fetch(`${API_BASE}/api/reports/tracking/${trackingId}`);
+        if (!res.ok) throw new Error('Tracking ID not found');
+        const data = await res.json();
+        const r = data.report;
+        const history = data.history || [];
+
+        let timelineStepsHtml = '';
+        const steps = ['SUBMITTED', 'AI_CHECKED', 'ADMIN_VERIFIED', 'ACTIONED'];
+        
+        steps.forEach(step => {
+            const isCurrentOrPassed = isStateActiveOrPassed(r.status, step);
+            timelineStepsHtml += `
+                <div class="timeline-step ${isCurrentOrPassed ? 'completed' : ''}">
+                    <div class="timeline-title">${step} ${r.status === step ? '📍 (Current)' : ''}</div>
+                </div>
+            `;
+        });
+
+        let historyHtml = '';
+        history.forEach(h => {
+            historyHtml += `
+                <div style="background:rgba(0,0,0,0.3); padding:6px 10px; border-radius:4px; margin-top:4px; font-size:11px;">
+                    <div><strong>${h.fromState} ➔ ${h.toState}</strong> by <em>${escapeHtml(h.performedBy)}</em></div>
+                    <div style="color:#94a3b8;">${escapeHtml(h.comments || '')}</div>
+                </div>
+            `;
+        });
+
+        resultBox.innerHTML = `
+            <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:8px; padding:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:12px; font-weight:bold; color:var(--accent-blue);">${r.trackingId}</span>
+                    <span class="badge-status status-${r.status}">${r.status}</span>
+                </div>
+                <h4 style="margin:6px 0; font-size:13px;">${escapeHtml(r.title)}</h4>
+                <div class="timeline">
+                    ${timelineStepsHtml}
+                </div>
+                <div style="margin-top:12px;">
+                    <strong style="font-size:11px; color:#cbd5e1;">Audit & Verification Ledger:</strong>
+                    ${historyHtml}
+                </div>
+            </div>
+        `;
+
+    } catch (err) {
+        resultBox.innerHTML = `<div style="color:#f87171; font-size:0.8rem;">${err.message}</div>`;
+    }
+}
+
+function isStateActiveOrPassed(current, step) {
+    const order = ['SUBMITTED', 'AI_CHECKED', 'ADMIN_VERIFIED', 'ACTIONED'];
+    return order.indexOf(current) >= order.indexOf(step);
+}
+
+/**
+ * 11. Civic Reporter Leaderboard
+ */
+async function fetchLeaderboard() {
+    try {
+        const res = await fetch(`${API_BASE}/api/reputation/leaderboard`);
+        if (!res.ok) return;
+        const list = await res.json();
+        const container = document.getElementById('leaderboard-list');
+        container.innerHTML = '';
+
+        list.forEach((u, i) => {
+            const div = document.createElement('div');
+            div.className = 'leader-card';
+            div.innerHTML = `
+                <div class="leader-rank">#${i + 1}</div>
+                <div class="leader-info">
+                    <div class="leader-name">${escapeHtml(u.fullName || u.username)}</div>
+                    <div class="leader-badge">${u.badgeTier}</div>
+                </div>
+                <div class="leader-score">${u.score} pts</div>
+            `;
+            container.appendChild(div);
+        });
+    } catch (e) {}
+}
+
+           
+
+/**
+ * 12. Admin Action Handlers
+ */
+async function verifyReportFromMap(id) {
+    if (!confirm('Confirm ground truth verification for this citizen report?')) return;
+    try {
+        const res = await fetch(`${API_BASE}/api/admin/reports/${id}/verify`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminUser: 'admin_ndrf', comments: 'Confirmed by ground team' })
+        });
+        if (res.ok) {
+            fetchReportsGeoJson();
+        }
+    } catch (e) {
+        alert('Verification error: ' + e.message);
+    }
+}
+
+async function flagRumorFromMap(id) {
+    const reason = prompt('Enter reason for flagging this report as False Alarm / Rumor:', 'Exaggerated casualty figures contradicted by official flood station');
+    if (!reason) return;
+    try {
+        const res = await fetch(`${API_BASE}/api/admin/reports/${id}/false-alarm`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminUser: 'admin_ndrf', reason: reason })
+        });
+        if (res.ok) {
+            fetchReportsGeoJson();
+        }
+    } catch (e) {
+        alert('Action error: ' + e.message);
+    }
+}
+
+function openActionModalForId(id, title) {
+    activeReportForAction = id;
+    document.getElementById('action-modal-report-title').innerText = `Incident: ${title}`;
+    document.getElementById('action-modal').classList.remove('hidden');
+}
+
+function closeActionModal() {
+    document.getElementById('action-modal').classList.add('hidden');
+    activeReportForAction = null;
+}
+
+async function confirmDispatchAction() {
+    if (!activeReportForAction) return;
+    const team = document.getElementById('action-team').value;
+    const instructions = document.getElementById('action-instructions').value;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/admin/reports/${activeReportForAction}/action`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teamName: team, instructions: instructions })
+        });
+        if (res.ok) {
+            closeActionModal();
+            fetchReportsGeoJson();
+        }
+    } catch (e) {
+        alert('Dispatch error: ' + e.message);
+    }
+}
+
+function openEmergencyBroadcastModal() {
+    document.getElementById('broadcast-modal').classList.remove('hidden');
+}
+
+function closeBroadcastModal() {
+    document.getElementById('broadcast-modal').classList.add('hidden');
+}
+
+async function sendBroadcastAlert() {
+    const title = document.getElementById('bc-title').value;
+    const msg = document.getElementById('bc-msg').value;
+    const sev = document.getElementById('bc-severity').value;
+
+    try {
+        await fetch(`${API_BASE}/api/admin/broadcast-alert`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, message: msg, severity: sev })
+        });
+        closeBroadcastModal();
+        alert('⚡ Emergency Alert successfully broadcasted across citizen platforms!');
+    } catch (e) {
+        alert('Broadcast error: ' + e.message);
+    }
+}
+
+/**
+ * 13. Utilities & UI Controls
+ */
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+    const tabBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => {
+        const attr = b.getAttribute('onclick') || '';
+        return attr.includes(`'${tabId}'`) || attr.includes(`"${tabId}"`);
+    });
+    if (tabBtn) {
+        tabBtn.classList.add('active');
+    } else if (window.event && window.event.target && window.event.target.classList) {
+        window.event.target.classList.add('active');
+    }
+
+    const content = document.getElementById(tabId);
+    if (content) content.classList.add('active');
+}
+
+function applyFilters() {
+    fetchReportsGeoJson();
+}
+
+function resetFilters() {
+    document.getElementById('filter-hazard').value = '';
+    document.getElementById('filter-status').value = '';
+    document.getElementById('filter-district').value = '';
+    document.getElementById('filter-radius').value = 5;
+    document.getElementById('radius-val').innerText = '5';
+    if (radiusCircle) {
+        map.removeLayer(radiusCircle);
+        radiusCircle = null;
+    }
+    fetchReportsGeoJson();
+}
+
+function toggleAudio() {
+    audioEnabled = !audioEnabled;
+    document.getElementById('btn-sound-toggle').innerText = audioEnabled ? '🔔 Sound ON' : '🔕 Sound OFF';
+}
+
+function playChime() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {}
+}
+
+function playAlarm() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(440, ctx.currentTime);
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.5);
+    } catch (e) {}
+}
+
 function debounce(func, wait) {
     let timeout;
     return function (...args) {
@@ -1073,5 +1207,5 @@ function debounce(func, wait) {
 
 function escapeHtml(str) {
     if (!str) return '';
-    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }

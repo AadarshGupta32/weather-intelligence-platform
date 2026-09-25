@@ -37,6 +37,12 @@ export const endpoints = {
     // IMD Telemetry Weather Data
     getTelemetry: (city = 'Indore') => request(`/api/weather/telemetry?city=${encodeURIComponent(city)}`),
 
+    // NDMA SACHET National Alerts
+    getNationalAlerts: () => request('/api/alerts/national'),
+
+    // GeoNames Indian Cities Search
+    searchCities: (query) => request(`/api/cities/search?query=${encodeURIComponent(query)}`),
+
     // SITREP Tactical Report (HTML / Plaintext)
     getSitrep: () => request('/api/reports/sitrep', {
         headers: { 'Accept': 'text/plain' }
