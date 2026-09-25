@@ -1,7 +1,9 @@
 package com.weatherintel;
 
 import com.weatherintel.entity.*;
+import com.weatherintel.repository.EmergencyShelterRepository;
 import com.weatherintel.repository.ReportRepository;
+import com.weatherintel.repository.TrustScoreRepository;
 import com.weatherintel.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -9,8 +11,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableAsync;
 
-import java.time.LocalDateTime;
-import java.util.UUID;
 
 @SpringBootApplication
 @EnableAsync
@@ -24,7 +24,8 @@ public class WeatherIntelApplication {
     CommandLineRunner seedDemoData(
             ReportRepository reportRepository,
             UserRepository userRepository,
-            com.weatherintel.repository.EmergencyShelterRepository shelterRepository) {
+            EmergencyShelterRepository shelterRepository,
+            TrustScoreRepository trustScoreRepository) {
         return args -> {
             if (shelterRepository.count() == 0) {
                 shelterRepository.save(new EmergencyShelter("Holkar Stadium Relief Camp", "EVACUATION_CAMP", 22.7246, 75.8732, "Race Course Road, New Palasia, Indore", "+91-731-2544101", 1500, 320));
@@ -35,10 +36,53 @@ public class WeatherIntelApplication {
                 System.out.println(">>> Seeded 5 Operational Emergency Shelters & Safe Zones <<<");
             }
 
+            if (userRepository.count() == 0) {
+                User arun = new User("citizen_arun", "Arun Sharma", "arun.sharma@example.com", "CITIZEN");
+                userRepository.save(arun);
+
+                User priya = new User("citizen_priya", "Priya Patel", "priya.patel@example.com", "CITIZEN");
+                userRepository.save(priya);
+
+                User imd = new User("imd_bot", "IMD Social Ingestion Bot", "bot@imd.gov.in", "SYSTEM_BOT");
+                userRepository.save(imd);
+
+                User admin = new User("admin_ndrf", "NDRF Command Officer", "command@ndrf.gov.in", "DISASTER_ADMIN");
+                userRepository.save(admin);
+
+                TrustScore tsArun = new TrustScore(arun);
+                tsArun.setScore(85.0);
+                tsArun.setVerifiedCount(12);
+                tsArun.setTotalSubmissions(12);
+                tsArun.setBadgeTier(BadgeTier.VERIFIED_WEATHER_SCOUT);
+                trustScoreRepository.save(tsArun);
+
+                TrustScore tsPriya = new TrustScore(priya);
+                tsPriya.setScore(60.0);
+                tsPriya.setVerifiedCount(3);
+                tsPriya.setTotalSubmissions(3);
+                tsPriya.setBadgeTier(BadgeTier.ACTIVE_SCOUT);
+                trustScoreRepository.save(tsPriya);
+
+                TrustScore tsImd = new TrustScore(imd);
+                tsImd.setScore(100.0);
+                tsImd.setVerifiedCount(500);
+                tsImd.setTotalSubmissions(500);
+                tsImd.setBadgeTier(BadgeTier.OFFICIAL_AGENCY);
+                trustScoreRepository.save(tsImd);
+
+                TrustScore tsAdmin = new TrustScore(admin);
+                tsAdmin.setScore(100.0);
+                tsAdmin.setVerifiedCount(0);
+                tsAdmin.setTotalSubmissions(0);
+                tsAdmin.setBadgeTier(BadgeTier.OFFICIAL_AGENCY);
+                trustScoreRepository.save(tsAdmin);
+
+                System.out.println(">>> Seeded Demo Users and Trust Scores <<<");
+            }
+
             if (reportRepository.count() == 0) {
                 User arun = userRepository.findByUsername("citizen_arun").orElse(null);
                 User priya = userRepository.findByUsername("citizen_priya").orElse(null);
-                User imd = userRepository.findByUsername("imd_bot").orElse(null);
 
                 // 1. Critical Waterlogging in Vijay Nagar
                 Report r1 = new Report();
