@@ -15,11 +15,53 @@ let reportsData = [];
 let activeReportForAction = null;
 let isRadarActive = false;
 let isSheltersActive = true;
+let isSachetActive = true;
+let sachetLayer = null;
+let currentTelemetryCity = 'Indore';
+let indiaCities = []; // Loaded from backend /api/cities/india (GeoNames-backed)
+let nationalAlerts = []; // Loaded from backend /api/alerts/national (NDMA SACHET)
+
+// Standard Indian State & UT Centroids for national alerts
+const INDIAN_STATES_CENTROIDS = {
+    'andhra pradesh': { lat: 15.9129, lon: 79.7400, name: 'Andhra Pradesh' },
+    'arunachal pradesh': { lat: 28.2180, lon: 94.7278, name: 'Arunachal Pradesh' },
+    'assam': { lat: 26.2006, lon: 92.9376, name: 'Assam' },
+    'bihar': { lat: 25.0961, lon: 85.3131, name: 'Bihar' },
+    'chhattisgarh': { lat: 21.2787, lon: 81.8661, name: 'Chhattisgarh' },
+    'goa': { lat: 15.2993, lon: 74.1240, name: 'Goa' },
+    'gujarat': { lat: 22.2587, lon: 71.1924, name: 'Gujarat' },
+    'haryana': { lat: 29.0588, lon: 76.0856, name: 'Haryana' },
+    'himachal pradesh': { lat: 31.1048, lon: 77.1734, name: 'Himachal Pradesh' },
+    'jharkhand': { lat: 23.6102, lon: 85.2799, name: 'Jharkhand' },
+    'karnataka': { lat: 15.3173, lon: 75.7139, name: 'Karnataka' },
+    'kerala': { lat: 10.8505, lon: 76.2711, name: 'Kerala' },
+    'madhya pradesh': { lat: 22.9734, lon: 78.6569, name: 'Madhya Pradesh' },
+    'maharashtra': { lat: 19.7515, lon: 75.7139, name: 'Maharashtra' },
+    'manipur': { lat: 24.6637, lon: 93.9063, name: 'Manipur' },
+    'meghalaya': { lat: 25.4670, lon: 91.3662, name: 'Meghalaya' },
+    'mizoram': { lat: 23.1645, lon: 92.9376, name: 'Mizoram' },
+    'nagaland': { lat: 26.1584, lon: 94.5624, name: 'Nagaland' },
+    'odisha': { lat: 20.9517, lon: 85.0985, name: 'Odisha' },
+    'punjab': { lat: 31.1471, lon: 75.3412, name: 'Punjab' },
+    'rajasthan': { lat: 27.0238, lon: 74.2179, name: 'Rajasthan' },
+    'sikkim': { lat: 27.5330, lon: 88.5122, name: 'Sikkim' },
+    'tamil nadu': { lat: 11.1271, lon: 78.6569, name: 'Tamil Nadu' },
+    'telangana': { lat: 18.1124, lon: 79.0193, name: 'Telangana' },
+    'tripura': { lat: 23.9408, lon: 91.9882, name: 'Tripura' },
+    'uttar pradesh': { lat: 26.8467, lon: 80.9462, name: 'Uttar Pradesh' },
+    'uttarakhand': { lat: 30.0668, lon: 79.0193, name: 'Uttarakhand' },
+    'west bengal': { lat: 22.9868, lon: 87.8550, name: 'West Bengal' },
+    'delhi': { lat: 28.7041, lon: 77.1025, name: 'Delhi' },
+    'jammu and kashmir': { lat: 33.7782, lon: 76.5762, name: 'Jammu & Kashmir' },
+    'ladakh': { lat: 34.1526, lon: 77.5771, name: 'Ladakh' }
+};
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
-    fetchTelemetry();
+    loadIndianCities();
+    fetchNationalAlerts();
+    fetchTelemetry(22.7196, 75.8577, 'Indore');
     fetchReportsGeoJson();
     fetchSheltersGeoJson();
     fetchLeaderboard();
@@ -36,24 +78,272 @@ document.addEventListener('DOMContentLoaded', () => {
         drawRadiusCircle(lat, lng, radiusKm);
     });
 
-    // Periodically refresh telemetry every 60s
-    setInterval(fetchTelemetry, 60000);
+    // Periodically refresh telemetry every 60s & SACHET alerts every 3m
+    setInterval(() => {
+        const coords = findCityCoords(currentTelemetryCity) || { lat: 22.7196, lon: 75.8577 };
+        fetchTelemetry(coords.lat, coords.lon, currentTelemetryCity);
+    }, 60000);
+    setInterval(fetchNationalAlerts, 180000);
 });
+
+/**
+ * 0. National City Directory (GeoNames-backed, via backend /api/cities/india)
+ */
+async function loadIndianCities() {
+    try {
+        const res = await fetch(`${API_BASE}/api/cities/india`);
+        if (!res.ok) throw new Error('Failed to fetch city directory');
+        indiaCities = await res.json();
+        console.log(`Loaded ${indiaCities.length} Indian cities from national directory`);
+        populateCityDatalist();
+        if (nationalAlerts && nationalAlerts.length > 0) {
+            renderSachetMapMarkers();
+        }
+    } catch (e) {
+        console.warn('City directory load warning:', e.message);
+    }
+}
+
+/**
+ * Populates global datalist for instant autocomplete in search & report form
+ */
+function populateCityDatalist() {
+    const datalist = document.getElementById('cities-datalist');
+    if (!datalist || !indiaCities || indiaCities.length === 0) return;
+    datalist.innerHTML = '';
+    indiaCities.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.name;
+        opt.label = `${c.name} (${c.state || 'India'})`;
+        datalist.appendChild(opt);
+    });
+}
+
+/**
+ * Look up a city's coordinates by name (case-insensitive) from directory or state centroids.
+ * Returns { lat, lon, state, name } or null if not found.
+ */
+function findCityCoords(cityName) {
+    if (!cityName) return null;
+    const clean = cityName.trim().toLowerCase();
+    if (indiaCities && indiaCities.length > 0) {
+        const match = indiaCities.find(
+            c => c.name && c.name.toLowerCase() === clean
+        );
+        if (match) {
+            return { lat: match.latitude, lon: match.longitude, state: match.state, name: match.name };
+        }
+    }
+    // Fallback to states dictionary
+    if (INDIAN_STATES_CENTROIDS[clean]) {
+        const s = INDIAN_STATES_CENTROIDS[clean];
+        return { lat: s.lat, lon: s.lon, state: s.name, name: s.name };
+    }
+    return null;
+}
+
+function onCitySelected(cityName) {
+    if (!cityName) return;
+    switchTelemetryToCity(cityName);
+}
+
+function onReportCitySelected(cityName) {
+    const coords = findCityCoords(cityName);
+    if (!coords) return;
+    const latInput = document.getElementById('rep-lat');
+    const lonInput = document.getElementById('rep-lon');
+    const distInput = document.getElementById('rep-district');
+    if (latInput) latInput.value = coords.lat.toFixed(4);
+    if (lonInput) lonInput.value = coords.lon.toFixed(4);
+    if (distInput && coords.state) distInput.value = coords.state;
+    map.panTo([coords.lat, coords.lon]);
+    drawRadiusCircle(coords.lat, coords.lon, 5);
+}
+
+/**
+ * Scan alert text to match known Indian cities or states
+ */
+function extractLocationFromAlert(alert) {
+    if (!alert) return null;
+    const text = `${alert.title || ''} ${alert.description || ''} ${alert.author || ''}`.toLowerCase();
+
+    // 1. Try finding a known city in the text (checking first 300 major cities)
+    if (indiaCities && indiaCities.length > 0) {
+        for (let i = 0; i < Math.min(indiaCities.length, 300); i++) {
+            const c = indiaCities[i];
+            if (c.name && c.name.length >= 4) {
+                const regex = new RegExp(`\\b${c.name.toLowerCase()}\\b`, 'i');
+                if (regex.test(text)) {
+                    return { name: c.name, lat: c.latitude, lon: c.longitude, isState: false };
+                }
+            }
+        }
+    }
+
+    // 2. Try finding a state in the text
+    for (const [stateKey, stateData] of Object.entries(INDIAN_STATES_CENTROIDS)) {
+        const regex = new RegExp(`\\b${stateKey}\\b`, 'i');
+        if (regex.test(text)) {
+            return { name: stateData.name, lat: stateData.lat, lon: stateData.lon, isState: true };
+        }
+    }
+
+    return null;
+}
+
+/**
+ * 0b. NDMA SACHET National Disaster Alert Feed
+ * Live RSS/CAP ingestion from backend /api/alerts/national
+ */
+async function fetchNationalAlerts() {
+    const list = document.getElementById('sachet-alerts-list');
+    const badge = document.getElementById('sachet-count-badge');
+    if (!list) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/alerts/national`);
+        if (!res.ok) throw new Error('Failed to fetch SACHET alerts');
+        const alerts = await res.json();
+        nationalAlerts = alerts || [];
+
+        if (badge) {
+            badge.innerText = `${nationalAlerts.length} Active Alerts`;
+        }
+
+        list.innerHTML = '';
+        if (nationalAlerts.length === 0) {
+            list.innerHTML = '<div style="color:#94a3b8; font-size:0.75rem; text-align:center; padding:12px;">No active national disaster advisories at this time.</div>';
+            return;
+        }
+
+        // Render up to 20 latest alerts
+        const displayAlerts = nationalAlerts.slice(0, 20);
+        displayAlerts.forEach((alert, idx) => {
+            const card = document.createElement('div');
+            card.className = 'sachet-alert-card clickable';
+
+            const rawTitle = alert.title || 'National Disaster Advisory';
+            const cleanTitle = escapeHtml(rawTitle);
+            const pubDateStr = alert.pubDate ? new Date(alert.pubDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : 'Live';
+            const link = alert.link || '#';
+            const author = alert.author ? escapeHtml(alert.author) : 'NDMA / IMD';
+
+            const matchedLoc = extractLocationFromAlert(alert);
+
+            card.innerHTML = `
+                <div class="sachet-alert-title">
+                    ⚠️ ${cleanTitle}
+                </div>
+                ${alert.description ? `<div style="font-size:0.72rem; color:#94a3b8; line-height:1.3;">${escapeHtml(alert.description)}</div>` : ''}
+                <div class="sachet-alert-meta">
+                    <span>⏱️ ${pubDateStr}</span>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        ${matchedLoc ? `<button class="btn btn-secondary btn-sm" style="padding:1px 5px; font-size:0.65rem;" onclick="event.stopPropagation(); switchTelemetryToCity('${escapeHtml(matchedLoc.name)}')">📍 ${escapeHtml(matchedLoc.name)}</button>` : ''}
+                        ${link !== '#' ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" class="sachet-alert-link" onclick="event.stopPropagation()">CAP Bulletin ↗</a>` : ''}
+                    </div>
+                </div>
+            `;
+
+            // Clicking card focuses on map
+            card.onclick = () => focusAlertOnMap(idx);
+            list.appendChild(card);
+        });
+
+        // Update the top navigation live ticker with the latest clean headline
+        const englishAlert = nationalAlerts.find(a => a.title && /[a-zA-Z]{5,}/.test(a.title));
+        if (englishAlert) {
+            const ticker = document.getElementById('live-ticker');
+            if (ticker) {
+                ticker.innerText = `NDMA SACHET: ${englishAlert.title}`;
+            }
+        }
+
+        // Plot interactive alert markers onto the Leaflet GIS map
+        renderSachetMapMarkers();
+
+    } catch (e) {
+        console.warn('SACHET alert fetch warning:', e.message);
+        if (badge) badge.innerText = 'Standby';
+        list.innerHTML = '<div style="color:#94a3b8; font-size:0.75rem; text-align:center; padding:8px;">Syncing with NDMA SACHET national feed...</div>';
+    }
+}
+
+/**
+ * Render SACHET Disaster Alert markers on GIS Map
+ */
+function renderSachetMapMarkers() {
+    if (!sachetLayer) return;
+    sachetLayer.clearLayers();
+    if (!isSachetActive || !nationalAlerts || nationalAlerts.length === 0) return;
+
+    nationalAlerts.forEach((alert, idx) => {
+        const loc = extractLocationFromAlert(alert);
+        if (!loc) return;
+
+        const marker = L.circleMarker([loc.lat, loc.lon], {
+            radius: 8,
+            fillColor: '#ef4444',
+            color: '#fee2e2',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.85
+        });
+
+        const cleanTitle = escapeHtml(alert.title || 'National Disaster Advisory');
+        const cleanDesc = alert.description ? escapeHtml(alert.description) : '';
+        const cleanAuthor = alert.author ? escapeHtml(alert.author) : 'NDMA SACHET / IMD';
+        const pubDateStr = alert.pubDate ? new Date(alert.pubDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Live';
+        const link = alert.link || '#';
+
+        const popupContent = `
+            <div class="sachet-popup-title">🚨 ${cleanTitle}</div>
+            <div class="sachet-popup-agency">🏛️ ${cleanAuthor} | ⏱️ ${pubDateStr}</div>
+            ${cleanDesc ? `<div class="sachet-popup-desc">${cleanDesc}</div>` : ''}
+            <div class="sachet-popup-actions">
+                <button class="sachet-popup-btn" onclick="switchTelemetryToCity('${escapeHtml(loc.name)}')">📍 Sensor: ${escapeHtml(loc.name)}</button>
+                ${link !== '#' ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; font-size:11px; text-decoration:none;">CAP Bulletin ↗</a>` : ''}
+            </div>
+        `;
+
+        marker.bindPopup(popupContent, { className: 'sachet-leaflet-popup', maxWidth: 320 });
+        marker.alertIndex = idx;
+        sachetLayer.addLayer(marker);
+    });
+}
+
+function focusAlertOnMap(index) {
+    const alert = nationalAlerts[index];
+    if (!alert) return;
+    const loc = extractLocationFromAlert(alert);
+    if (loc) {
+        map.flyTo([loc.lat, loc.lon], 9, { duration: 1.2 });
+        if (!loc.isState) {
+            switchTelemetryToCity(loc.name);
+        }
+        if (sachetLayer) {
+            sachetLayer.eachLayer(layer => {
+                if (layer.alertIndex === index) {
+                    layer.openPopup();
+                }
+            });
+        }
+    }
+}
 
 /**
  * 1. GIS Leaflet Map Setup
  */
 function initMap() {
     map = L.map('gis-map', {
-        center: [22.7196, 75.8577], // Centered on Indore
-        zoom: 12,
+        center: [22.9734, 78.6569], // Centered on India (national view)
+        zoom: 5,
         zoomControl: true
     });
 
-    // Dark Map Tiles (CartoDB Dark Matter)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-        subdomains: 'abcd',
+    // Free OpenStreetMap Tiles (no API key required)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        subdomains: 'abc',
         maxZoom: 19
     }).addTo(map);
 
@@ -104,6 +394,9 @@ function initMap() {
             `);
         }
     }).addTo(map);
+
+    // 3. SACHET National Alerts Layer
+    sachetLayer = L.layerGroup().addTo(map);
 }
 
 function getMarkerColor(props) {
@@ -176,9 +469,18 @@ function createPopupContent(p) {
 /**
  * 2. Meteorological Telemetry Fetcher
  */
-async function fetchTelemetry() {
+async function fetchTelemetry(lat, lon, city) {
     try {
-        const res = await fetch(`${API_BASE}/api/telemetry/current`);
+        const params = new URLSearchParams();
+        if (lat != null) params.append('lat', lat);
+        if (lon != null) params.append('lon', lon);
+        if (city) params.append('city', city);
+
+        const url = params.toString()
+            ? `${API_BASE}/api/telemetry/current?${params.toString()}`
+            : `${API_BASE}/api/telemetry/current`;
+
+        const res = await fetch(url);
         if (!res.ok) return;
         const t = await res.json();
 
@@ -201,6 +503,21 @@ async function fetchTelemetry() {
     } catch (e) {
         console.warn('Telemetry fetch warning:', e.message);
     }
+}
+
+/**
+ * Convenience: switch telemetry + map focus to a named Indian city using the
+ * national city directory loaded from the backend (GeoNames-backed).
+ */
+function switchTelemetryToCity(cityName) {
+    const coords = findCityCoords(cityName);
+    if (!coords) {
+        console.warn(`City "${cityName}" not found in national directory`);
+        return false;
+    }
+    fetchTelemetry(coords.lat, coords.lon, cityName);
+    map.flyTo([coords.lat, coords.lon], 11, { duration: 1.2 });
+    return true;
 }
 
 /**
@@ -353,6 +670,22 @@ function toggleSheltersLayer() {
     }
 }
 
+function toggleSachetLayer() {
+    const btn = document.getElementById('btn-sachet');
+    isSachetActive = !isSachetActive;
+
+    if (isSachetActive) {
+        if (!map.hasLayer(sachetLayer)) sachetLayer.addTo(map);
+        btn.innerText = '📡 SACHET Alerts: ON';
+        btn.classList.add('sachet-active');
+        renderSachetMapMarkers();
+    } else {
+        if (map.hasLayer(sachetLayer)) map.removeLayer(sachetLayer);
+        btn.innerText = '📡 SACHET Alerts: OFF';
+        btn.classList.remove('sachet-active');
+    }
+}
+
 /**
  * 5. Media Forensics Modal
  */
@@ -452,7 +785,8 @@ function focusOnShelter(lat, lon) {
  * 7. Open Printable Situation Report (SITREP)
  */
 function openSitrep() {
-    window.open(`${API_BASE}/api/admin/sitrep/html?district=Indore`, '_blank');
+    const city = currentTelemetryCity || 'Indore';
+    window.open(`${API_BASE}/api/admin/sitrep/html?district=${encodeURIComponent(city)}`, '_blank');
 }
 
 /**
@@ -692,6 +1026,8 @@ async function fetchLeaderboard() {
     } catch (e) {}
 }
 
+           
+
 /**
  * 12. Admin Action Handlers
  */
@@ -792,8 +1128,18 @@ function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
-    event.target.classList.add('active');
-    document.getElementById(tabId).classList.add('active');
+    const tabBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => {
+        const attr = b.getAttribute('onclick') || '';
+        return attr.includes(`'${tabId}'`) || attr.includes(`"${tabId}"`);
+    });
+    if (tabBtn) {
+        tabBtn.classList.add('active');
+    } else if (window.event && window.event.target && window.event.target.classList) {
+        window.event.target.classList.add('active');
+    }
+
+    const content = document.getElementById(tabId);
+    if (content) content.classList.add('active');
 }
 
 function applyFilters() {

@@ -674,7 +674,78 @@ body.dark-theme {
     color: #93c5fd;
 }
 
+.btn-layer.sachet-active {
+    background: rgba(220, 38, 38, 0.25);
+    border-color: #ef4444;
+    color: #fca5a5;
+}
+
 .dot-shelter { background: #34d399; }
+.dot-sachet { background: #ef4444; }
+
+/* City Selector & Quick Metros in Telemetry Strip */
+.city-selector-wrap {
+    display: inline-flex;
+    align-items: center;
+}
+
+#telem-city-search {
+    background: #0d1527;
+    border: 1px solid #1e293b;
+    color: #38bdf8;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.74rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    width: 145px;
+    transition: all 0.2s ease;
+}
+
+#telem-city-search:focus {
+    outline: none;
+    border-color: #38bdf8;
+    background: #162036;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.25);
+}
+
+.city-quick-chips {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 2px 0;
+}
+
+.city-quick-chips::-webkit-scrollbar {
+    height: 3px;
+}
+
+.city-chip {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+
+.city-chip:hover {
+    border-color: #38bdf8;
+    color: #e0f2fe;
+    background: rgba(56, 189, 248, 0.12);
+}
+
+.city-chip.active {
+    background: #0369a1;
+    border-color: #38bdf8;
+    color: #ffffff;
+    font-weight: 700;
+}
 
 /* Media Forensics Comparison */
 .forensics-grid {
@@ -736,5 +807,166 @@ body.dark-theme {
     font-size: 0.75rem;
     color: #fca5a5;
     margin-top: 2px;
+}
+
+/* SACHET National Disaster Alert Panel */
+.sachet-panel {
+    background: rgba(239, 68, 68, 0.05);
+    border: 1px solid rgba(239, 68, 68, 0.28);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.sachet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.sachet-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.sachet-title {
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #fca5a5;
+    text-transform: uppercase;
+}
+
+.badge-sachet-count {
+    background: #dc2626;
+    color: #ffffff;
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.sachet-alerts-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 210px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.sachet-alerts-container::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sachet-alerts-container::-webkit-scrollbar-thumb {
+    background: rgba(239, 68, 68, 0.35);
+    border-radius: 4px;
+}
+
+.sachet-alert-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(239, 68, 68, 0.22);
+    border-left: 3px solid #ef4444;
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.sachet-alert-card:hover {
+    transform: translateY(-1px);
+    border-color: #f87171;
+    background: #222e4d;
+}
+
+.sachet-alert-title {
+    font-size: 0.77rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    line-height: 1.35;
+}
+
+.sachet-alert-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.66rem;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 2px;
+}
+
+.sachet-alert-link {
+    color: #38bdf8;
+    text-decoration: none;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.sachet-alert-link:hover {
+    text-decoration: underline;
+    color: #7dd3fc;
+}
+
+.sachet-alert-card.clickable {
+    cursor: pointer;
+}
+
+/* Leaflet SACHET Map Popup Styling */
+.sachet-leaflet-popup .leaflet-popup-content-wrapper {
+    background: #0f172a;
+    color: #f1f5f9;
+    border: 1px solid #ef4444;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(220, 38, 38, 0.4);
+}
+
+.sachet-leaflet-popup .leaflet-popup-tip {
+    background: #0f172a;
+}
+
+.sachet-popup-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #f87171;
+    margin-bottom: 6px;
+    line-height: 1.35;
+}
+
+.sachet-popup-agency {
+    font-size: 0.68rem;
+    color: #38bdf8;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 4px;
+}
+
+.sachet-popup-desc {
+    font-size: 0.72rem;
+    color: #cbd5e1;
+    line-height: 1.4;
+    margin-bottom: 8px;
+    max-height: 90px;
+    overflow-y: auto;
+}
+
+.sachet-popup-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
