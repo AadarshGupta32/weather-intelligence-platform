@@ -1,6 +1,6 @@
 /**
  * SURAKSHA-NET API Endpoints
- * Provides structured, easy-to-maintain API methods for all frontend services
+ * Accurately mapped to live Spring Boot & Python AI backend controllers
  */
 
 import { request } from './client.js';
@@ -16,26 +16,48 @@ export const endpoints = {
         body: formData
     }),
 
-    // Operator Verification
-    verifyIncident: (id, payload) => request(`/api/reports/${id}/verify`, {
-        method: 'POST',
-        body: JSON.stringify(payload)
+    // Operator Verification (PUT /api/admin/reports/{id}/verify)
+    verifyIncident: (id, payload = {}) => request(`/api/admin/reports/${id}/${payload.verified ? 'verify' : 'false-alarm'}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+            adminUser: 'admin_ndrf',
+            comments: payload.comments || 'Ground truth verified via commander dispatch console'
+        })
     }),
 
-    // Operator Action Dispatch
-    dispatchAction: (id, payload) => request(`/api/reports/${id}/action`, {
-        method: 'POST',
-        body: JSON.stringify(payload)
+    // Operator Action Dispatch (PUT /api/admin/reports/{id}/action)
+    dispatchAction: (id, payload = {}) => request(`/api/admin/reports/${id}/action`, {
+        method: 'PUT',
+        body: JSON.stringify({
+            teamName: payload.assignedUnit || 'NDRF Quick Response Team 4',
+            instructions: payload.notes || 'Dispatched inflatable motorboats and rescue squads'
+        })
     }),
 
-    // Shelters & Safe Zones
-    getShelters: () => request('/api/shelters'),
+    // Shelters & Safe Zones GeoJSON
+    getShelters: async () => {
+        const geojson = await request('/api/shelters/geojson');
+        if (geojson && Array.isArray(geojson.features)) {
+            return geojson.features.map(f => ({
+                id: f.properties?.id,
+                name: f.properties?.name,
+                type: f.properties?.type,
+                address: f.properties?.address,
+                contactPhone: f.properties?.contactPhone,
+                capacity: f.properties?.capacity,
+                availableSlots: f.properties?.availableSlots,
+                latitude: f.geometry?.coordinates?.[1],
+                longitude: f.geometry?.coordinates?.[0]
+            }));
+        }
+        return [];
+    },
 
-    // Citizen Sentinel Leaderboard
-    getLeaderboard: () => request('/api/reports/leaderboard'),
+    // Citizen Sentinel Leaderboard (/api/reputation/leaderboard)
+    getLeaderboard: () => request('/api/reputation/leaderboard'),
 
-    // IMD Telemetry Weather Data
-    getTelemetry: (city = 'Indore') => request(`/api/weather/telemetry?city=${encodeURIComponent(city)}`),
+    // IMD Telemetry Weather Data (/api/telemetry/current)
+    getTelemetry: (city = 'Indore') => request(`/api/telemetry/current?city=${encodeURIComponent(city)}`),
 
     // NDMA SACHET National Alerts
     getNationalAlerts: () => request('/api/alerts/national'),
